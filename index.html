@@ -219,18 +219,13 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
 
 <div id="toast"></div>
 
-<!-- ══ LOGIN ══ -->
-<div id="login-screen">
-  <div class="login-box">
+<!-- ══ LOGIN — dirender dinamis oleh JS ══ -->
+<div id="login-screen" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--navy)">
+  <div class="login-box" style="text-align:center">
     <div class="login-logo">SIKENDA</div>
-    <div class="login-tagline">Sistem Kendali Kinerja — Dinkes Kab. Lima Puluh Kota</div>
-    <select class="form-select" id="login-user" style="margin-bottom:12px">
-      <option value="">— Memuat daftar pengguna... —</option>
-    </select>
-    <input type="password" class="form-input" id="login-pass" placeholder="Password" style="margin-bottom:16px">
-    <button class="login-btn" id="login-btn" onclick="doLogin()">MASUK</button>
-    <div class="login-err" id="login-err"></div>
-    <div class="login-loading" id="login-loading" style="display:none"><span class="loading-spinner"></span> Memuat...</div>
+    <div class="login-tagline">Memeriksa sesi...</div>
+    <div style="margin:28px 0"><span class="loading-spinner" style="width:28px;height:28px;border-width:3px"></span></div>
+    <div style="font-size:12px;color:var(--text3)">Dinas Kesehatan Kab. Lima Puluh Kota</div>
   </div>
 </div>
 
@@ -339,8 +334,103 @@ function startClock() {
   tick(); setInterval(tick,1000);
 }
 
+// ── SESSION PERSISTENCE ──
+const SESSION_KEY = 'sikenda_session_v2';
+
+function saveSession(user) {
+  // Simpan data user ke localStorage (tanpa password untuk keamanan)
+  const sessionData = {
+    id: user.id,
+    name: user.name,
+    label: user.label,
+    role: user.role,
+    unit: user.unit,
+    superior: user.superior || null,
+    savedAt: Date.now()
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function getSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    // Sesi expire setelah 8 jam (28800000 ms)
+    if (Date.now() - s.savedAt > 28800000) { clearSession(); return null; }
+    return s;
+  } catch(e) { return null; }
+}
+
+// ── AUTO RESTORE SESSION ON LOAD ──
+async function tryRestoreSession() {
+  const session = getSession();
+  if (!session) {
+    // Tidak ada sesi — tampilkan login
+    await loadUsersForLogin();
+    return;
+  }
+
+  // Ada sesi — tampilkan splash loading
+  document.getElementById('login-screen').innerHTML = `
+    <div class="login-box" style="text-align:center">
+      <div class="login-logo">SIKENDA</div>
+      <div class="login-tagline">Memulihkan sesi...</div>
+      <div style="margin:24px 0"><span class="loading-spinner" style="width:24px;height:24px;border-width:3px"></span></div>
+      <div style="font-size:13px;color:var(--text2)">Selamat datang kembali,<br><strong style="color:var(--gold)">${session.name}</strong></div>
+    </div>`;
+
+  try {
+    // Verifikasi ke Firestore — pastikan akun masih aktif & data masih valid
+    const snap = await getDoc(doc(db, 'users', session.id));
+    if (!snap.exists()) { clearSession(); location.reload(); return; }
+    const u = { id: snap.id, ...snap.data() };
+    if (u.active === false) {
+      clearSession();
+      document.getElementById('login-screen').innerHTML = `
+        <div class="login-box"><div class="login-logo">SIKENDA</div>
+        <div class="login-tagline">Akun Dinonaktifkan</div>
+        <p style="color:#fc8181;margin:16px 0;font-size:13px">Akun Anda telah dinonaktifkan.<br>Hubungi administrator.</p>
+        <button class="login-btn" onclick="location.reload()">Kembali ke Login</button></div>`;
+      return;
+    }
+    // Sesi valid — perbarui data user terbaru dari Firestore
+    CU = u;
+    saveSession(u); // Perbarui timestamp sesi
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  } catch(e) {
+    // Gagal verifikasi (misal offline) — gunakan data sesi lokal
+    console.warn('Verifikasi sesi gagal, menggunakan data lokal:', e.message);
+    CU = session;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  }
+}
+
 // ── LOAD USERS FOR LOGIN DROPDOWN ──
 async function loadUsersForLogin() {
+  // Reset tampilan login normal
+  document.getElementById('login-screen').innerHTML = `
+    <div class="login-box">
+      <div class="login-logo">SIKENDA</div>
+      <div class="login-tagline">Sistem Kendali Kinerja — Dinkes Kab. Lima Puluh Kota</div>
+      <select class="form-select" id="login-user" style="margin-bottom:12px">
+        <option value="">— Memuat daftar pengguna... —</option>
+      </select>
+      <input type="password" class="form-input" id="login-pass" placeholder="Password" style="margin-bottom:16px">
+      <button class="login-btn" id="login-btn" onclick="doLogin()">MASUK</button>
+      <div class="login-err" id="login-err"></div>
+      <div class="login-loading" id="login-loading" style="display:none"><span class="loading-spinner"></span> Memuat...</div>
+    </div>`;
+  document.getElementById('login-pass').addEventListener('keyup', e => { if(e.key==='Enter') doLogin(); });
+
   try {
     const snap = await getDocs(collection(db,'users'));
     ALL_USERS = snap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
@@ -353,11 +443,11 @@ async function loadUsersForLogin() {
       sel.appendChild(opt);
     });
   } catch(e) {
-    document.getElementById('login-user').innerHTML = '<option value="">⚠ Gagal memuat data</option>';
+    const sel = document.getElementById('login-user');
+    if(sel) sel.innerHTML = '<option value="">⚠ Gagal memuat data</option>';
     console.error(e);
   }
 }
-loadUsersForLogin();
 
 // ── LOGIN ──
 window.doLogin = async function() {
@@ -377,25 +467,32 @@ window.doLogin = async function() {
     if(u.pass !== pass){err.textContent='Password salah.';return;}
     if(u.active===false){err.textContent='Akun dinonaktifkan. Hubungi admin.';return;}
     CU = u;
+    saveSession(u); // ← Simpan sesi ke localStorage
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
     initApp();
   } catch(e) {
     err.textContent='Error: '+e.message;
   } finally {
-    btn.disabled=false; ldg.style.display='none';
+    if(document.getElementById('login-btn')) {
+      document.getElementById('login-btn').disabled=false;
+    }
+    if(document.getElementById('login-loading')) {
+      document.getElementById('login-loading').style.display='none';
+    }
   }
 };
-document.getElementById('login-pass').addEventListener('keyup',e=>{if(e.key==='Enter')doLogin();});
 
 window.doLogout = function() {
+  clearSession(); // ← Hapus sesi dari localStorage
   CU=null;
-  document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').style.display='none';
-  document.getElementById('login-pass').value='';
-  document.getElementById('login-err').textContent='';
-  document.getElementById('login-user').value='';
+  // Reload halaman agar sesi bersih total
+  location.reload();
 };
+
+// ── JALANKAN RESTORE SESI SAAT HALAMAN DIMUAT ──
+tryRestoreSession();
 
 // ── INIT APP ──
 function initApp() {
