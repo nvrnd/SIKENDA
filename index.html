@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIKENDA — Dinas Kesehatan Kab. Lima Puluh Kota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy:#0B1426; --navy2:#112040; --navy3:#1a3060;
+  --gold:#C8A84B; --gold2:#e8c870; --gold3:#f5e199;
+  --teal:#1DAFA8; --teal2:#26d4cc;
+  --red:#E53E3E; --orange:#DD6B20; --green:#38A169; --blue:#3182CE;
+  --card:rgba(255,255,255,0.04); --card2:rgba(255,255,255,0.08);
+  --border:rgba(200,168,75,0.2); --border2:rgba(200,168,75,0.4);
+  --text:#E8EAF0; --text2:#A0AAC0; --text3:#6B7899;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 20%,rgba(29,175,168,0.06),transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(200,168,75,0.05),transparent 60%);pointer-events:none;z-index:0}
+
+/* ── LOGIN ── */
+#login-screen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--navy)}
+.login-box{background:linear-gradient(135deg,rgba(17,32,64,0.98),rgba(11,20,38,0.98));border:1px solid var(--border2);border-radius:20px;padding:48px 56px;width:440px;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(200,168,75,0.1);text-align:center}
+.login-logo{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--gold);letter-spacing:4px;margin-bottom:2px}
+.login-tagline{font-size:11px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:32px}
+.form-input,.form-select{width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;margin-bottom:12px;outline:none;transition:border-color 0.2s}
+.form-input:focus,.form-select:focus{border-color:var(--gold)}
+.form-select option{background:var(--navy2)}
+.login-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:10px;color:var(--navy);font-weight:700;font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;letter-spacing:0.5px}
+.login-btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(200,168,75,0.3)}
+.login-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.login-err{color:var(--red);font-size:13px;margin-top:10px;min-height:20px}
+.login-loading{color:var(--teal2);font-size:12px;margin-top:8px}
+
+/* ── APP ── */
+#app{display:none;min-height:100vh}
+.topbar{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;background:rgba(11,20,38,0.96);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:20px}
+.topbar-logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:var(--gold);letter-spacing:2px;white-space:nowrap}
+.topbar-divider{width:1px;height:32px;background:var(--border)}
+.topbar-info{flex:1}
+.topbar-title{font-size:12px;color:var(--text3);letter-spacing:.5px}
+.topbar-user{font-size:15px;font-weight:600;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.topbar-time{font-family:'DM Mono',monospace;font-size:13px;color:var(--teal);background:rgba(29,175,168,0.1);padding:4px 12px;border-radius:6px;border:1px solid rgba(29,175,168,0.2)}
+.topbar-date{font-size:11px;color:var(--text3);text-align:center}
+.topbar-btn{padding:6px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.2s}
+.logout-btn{background:rgba(229,62,62,0.15);border:1px solid rgba(229,62,62,0.3);color:var(--red)}
+.logout-btn:hover{background:rgba(229,62,62,0.25)}
+
+.sidebar{position:fixed;left:0;top:64px;bottom:0;width:224px;background:rgba(11,20,38,0.98);border-right:1px solid var(--border);overflow-y:auto;z-index:90;padding:12px 0}
+.nav-section{padding:10px 16px 4px;font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all 0.2s;border-left:3px solid transparent;user-select:none}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav-item.active{color:var(--gold);background:rgba(200,168,75,0.08);border-left-color:var(--gold)}
+.nav-icon{width:20px;text-align:center;font-size:15px}
+
+.main-content{margin-left:224px;margin-top:64px;padding:24px;min-height:calc(100vh - 64px);position:relative;z-index:1}
+.page{display:none}.page.active{display:block;animation:fadeIn 0.2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── CARDS ── */
+.page-title{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--gold);margin-bottom:4px}
+.page-sub{color:var(--text2);font-size:13px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.card-title{font-weight:600;font-size:14px;color:var(--gold2);flex:1}
+.card-badge{font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(200,168,75,0.15);color:var(--gold);font-weight:600;letter-spacing:.5px}
+
+/* ── FORM ── */
+.fi,.ft,.fs{width:100%;padding:9px 13px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s}
+.fi:focus,.ft:focus,.fs:focus{border-color:var(--gold)}
+.ft{resize:vertical;min-height:64px}
+.fs option{background:var(--navy2)}
+.fi:disabled,.ft:disabled,.fs:disabled{opacity:0.45;cursor:not-allowed}
+.fl{font-size:11px;color:var(--text3);margin-bottom:4px;display:block;letter-spacing:.3px}
+.fr{margin-bottom:12px}
+
+/* ── BUTTONS ── */
+.btn{padding:9px 20px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--navy)}
+.btn-gold:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px rgba(200,168,75,0.35)}
+.btn-teal{background:rgba(29,175,168,0.18);color:var(--teal2);border:1px solid rgba(29,175,168,0.3)}
+.btn-teal:hover:not(:disabled){background:rgba(29,175,168,0.28)}
+.btn-red{background:rgba(229,62,62,0.15);color:#fc8181;border:1px solid rgba(229,62,62,0.3)}
+.btn-red:hover:not(:disabled){background:rgba(229,62,62,0.25)}
+.btn-green{background:rgba(56,161,105,0.18);color:#68d391;border:1px solid rgba(56,161,105,0.3)}
+.btn-green:hover:not(:disabled){background:rgba(56,161,105,0.28)}
+.btn-blue{background:rgba(49,130,206,0.18);color:#90cdf4;border:1px solid rgba(49,130,206,0.3)}
+.btn-blue:hover:not(:disabled){background:rgba(49,130,206,0.28)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-xs{padding:3px 9px;font-size:11px}
+
+/* ── WORK BOX ── */
+.work-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.work-box{background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative}
+.work-box.locked::after{content:'🔒 Terkunci';position:absolute;top:10px;right:10px;font-size:10px;color:var(--text3);background:rgba(0,0,0,0.35);padding:2px 8px;border-radius:4px}
+.work-box-num{font-size:10px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+
+/* ── PROGRESS ── */
+.prog-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.prog-wrap{flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;border-radius:3px;transition:width 0.4s}
+.prog-pct{font-family:'DM Mono',monospace;font-size:13px;color:var(--gold);font-weight:500;min-width:38px}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(56,161,105,0.2);color:#68d391;border:1px solid rgba(56,161,105,0.3)}
+.badge-red{background:rgba(229,62,62,0.2);color:#fc8181;border:1px solid rgba(229,62,62,0.3)}
+.badge-orange{background:rgba(221,107,32,0.2);color:#f6ad55;border:1px solid rgba(221,107,32,0.3)}
+.badge-gold{background:rgba(200,168,75,0.2);color:var(--gold2);border:1px solid rgba(200,168,75,0.3)}
+.badge-blue{background:rgba(49,130,206,0.2);color:#90cdf4;border:1px solid rgba(49,130,206,0.3)}
+.badge-teal{background:rgba(29,175,168,0.2);color:var(--teal2);border:1px solid rgba(29,175,168,0.3)}
+
+/* ── GRID ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:1100px){.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){.sidebar{display:none}.main-content{margin-left:0}.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* ── STATS ── */
+.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+.stat-num{font-family:'Playfair Display',serif;font-size:34px;font-weight:700;color:var(--gold)}
+.stat-lbl{font-size:12px;color:var(--text2);margin-top:4px}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead tr{border-bottom:1px solid var(--border)}
+th{padding:10px 14px;font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;text-align:left;font-weight:600;white-space:nowrap}
+td{padding:10px 14px;font-size:13px;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top}
+tr:hover td{background:rgba(255,255,255,0.02)}
+td.mono{font-family:'DM Mono',monospace}
+td.c-red{color:#fc8181} td.c-orange{color:#f6ad55} td.c-green{color:#68d391}
+
+/* ── STARS ── */
+.stars{display:flex;gap:4px}
+.star{font-size:22px;cursor:pointer;color:#333;transition:color 0.15s;line-height:1}
+.star.on{color:var(--gold)}
+.star:hover{color:var(--gold2)}
+
+/* ── VALIDATION SECTION ── */
+.val-section{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(200,168,75,0.25)}
+.val-title{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+
+/* ── INDIKATOR ── */
+.ind-item{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;transition:border-color 0.2s}
+.ind-item.warn{border-color:rgba(221,107,32,0.4);background:rgba(221,107,32,0.04)}
+.ind-item.danger{border-color:rgba(229,62,62,0.4);background:rgba(229,62,62,0.04)}
+.ind-item.ok{border-color:rgba(56,161,105,0.3)}
+
+/* ── BAR CHART ── */
+.bar-chart{display:flex;gap:10px;align-items:flex-end;height:160px;padding:0 4px}
+.bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.bar-val{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold2)}
+.bar-body{width:100%;border-radius:4px 4px 0 0;transition:height 0.5s}
+.bar-lbl{font-size:9px;color:var(--text3);text-align:center;line-height:1.3;word-break:break-all}
+
+/* ── STAR CARD ── */
+.star-card{background:linear-gradient(135deg,rgba(200,168,75,0.12),rgba(200,168,75,0.04));border:1px solid var(--border2);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.star-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--navy);font-family:'Playfair Display',serif;flex-shrink:0}
+.star-name{font-weight:600;font-size:14px;color:var(--gold2)}
+.star-unit{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* ── LOG ── */
+.log-entry{background:rgba(255,255,255,0.03);border-radius:8px;padding:12px 16px;margin-bottom:8px;border-left:3px solid var(--gold)}
+.log-meta{font-size:11px;color:var(--text3);margin-bottom:4px;font-family:'DM Mono',monospace}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-box{background:var(--navy2);border:1px solid var(--border2);border-radius:16px;padding:28px;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 40px 80px rgba(0,0,0,0.6)}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;color:var(--gold);margin-bottom:20px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--navy2);border:1px solid var(--border2);border-radius:10px;padding:12px 20px;z-index:99999;font-size:13px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,0.4);transform:translateY(100px);opacity:0;transition:all 0.3s;max-width:360px}
+#toast.show{transform:translateY(0);opacity:1}
+
+/* ── MISC ── */
+.sep{height:1px;background:var(--border);margin:20px 0}
+.scroll-box{max-height:420px;overflow-y:auto}
+.scroll-box::-webkit-scrollbar{width:4px}
+.scroll-box::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.tabs{display:flex;gap:4px;margin-bottom:20px;background:rgba(255,255,255,0.04);border-radius:10px;padding:4px;width:fit-content;flex-wrap:wrap}
+.tab{padding:8px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);transition:all 0.2s;white-space:nowrap}
+.tab.active{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--navy);font-weight:700}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.loading-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(200,168,75,0.3);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:40px;color:var(--text3)}
+.empty-icon{font-size:40px;margin-bottom:12px}
+.flex{display:flex}.flex-c{display:flex;align-items:center}.flex-b{display:flex;align-items:center;justify-content:space-between}
+.gap-8{gap:8px}.gap-12{gap:12px}.gap-16{gap:16px}
+.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-16{margin-top:16px}
+.mb-8{margin-bottom:8px}.mb-12{margin-bottom:12px}
+.text-sm{font-size:12px}.text-xs{font-size:11px}
+.text-muted{color:var(--text2)}.text-gold{color:var(--gold)}.text-teal{color:var(--teal2)}
+.text-green{color:#68d391}.text-red{color:#fc8181}.text-orange{color:#f6ad55}
+.fw6{font-weight:600}.w-full{width:100%}
+</style>
+</head>
+<body>
+
+<!-- ══ FIREBASE CONFIG — GANTI DI SINI ══ -->
+<script>
+const FIREBASE_CONFIG = {
+apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
+  authDomain: "sikenda-8e254.firebaseapp.com",
+  projectId: "sikenda-8e254",
+  storageBucket: "sikenda-8e254.firebasestorage.app",
+  messagingSenderId: "1778301169",
+  appId: "1:1778301169:web:5bd343473de131d3421150"
+};
+</script>
+
+<div id="toast"></div>
+
+<!-- ══ LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">SIKENDA</div>
+    <div class="login-tagline">Sistem Kendali Kinerja — Dinkes Kab. Lima Puluh Kota</div>
+    <select class="form-select" id="login-user" style="margin-bottom:12px">
+      <option value="">— Memuat daftar pengguna... —</option>
+    </select>
+    <input type="password" class="form-input" id="login-pass" placeholder="Password" style="margin-bottom:16px">
+    <button class="login-btn" id="login-btn" onclick="doLogin()">MASUK</button>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-loading" id="login-loading" style="display:none"><span class="loading-spinner"></span> Memuat...</div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">SIKENDA</div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-info">
+      <div class="topbar-title">Dinas Kesehatan Kabupaten Lima Puluh Kota</div>
+      <div class="topbar-user" id="tb-user">—</div>
+    </div>
+    <div class="topbar-right">
+      <div style="text-align:center">
+        <div class="topbar-time"><span class="live-dot"></span><span id="clock">—</span></div>
+        <div class="topbar-date" id="tb-date">—</div>
+      </div>
+      <button class="topbar-btn logout-btn" onclick="doLogout()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="sidebar" id="sidebar">
+    <div class="nav-section">MENU UTAMA</div>
+    <div class="nav-item active" onclick="showPage('executive')" id="nav-executive"><span class="nav-icon">📊</span>Executive View</div>
+    <div class="nav-item" onclick="showPage('daily')" id="nav-daily"><span class="nav-icon">📋</span>Catatan Harian</div>
+    <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi"><span class="nav-icon">💰</span>Realisasi Fisik & Keuangan</div>
+    <div class="nav-item" onclick="showPage('indikator')" id="nav-indikator"><span class="nav-icon">🎯</span>Indikator Kinerja</div>
+    <div class="nav-item" onclick="showPage('log')" id="nav-log"><span class="nav-icon">📜</span>Log Kegiatan</div>
+    <div class="nav-section" style="margin-top:8px">VALIDASI</div>
+    <div class="nav-item" onclick="showPage('validasi')" id="nav-validasi"><span class="nav-icon">✅</span>Validasi Atasan</div>
+    <div class="nav-item" onclick="showPage('users')" id="nav-users" style="display:none"><span class="nav-icon">👥</span>Manajemen User</div>
+  </div>
+
+  <div class="main-content">
+    <div class="page active" id="page-executive"></div>
+    <div class="page" id="page-daily"></div>
+    <div class="page" id="page-realisasi"></div>
+    <div class="page" id="page-indikator"></div>
+    <div class="page" id="page-log"></div>
+    <div class="page" id="page-validasi"></div>
+    <div class="page" id="page-users"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL ══ -->
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// ── INIT FIREBASE ──
+const app = initializeApp(FIREBASE_CONFIG);
+const db = getFirestore(app);
+
+// ── STATE ──
+let CU = null; // current user
+let ALL_USERS = [];
+const UNITS = { sekretariat:'Sekretariat', p2p:'Bidang P2P', pelkes:'Bidang Pelayanan Kesehatan', kesmas:'Bidang Kesmas', sdk:'Bidang SDK' };
+const UNIT_KEYS = Object.keys(UNITS);
+let today = getTodayStr();
+let valStarsMap = {};
+
+// ── HELPERS ──
+function getTodayStr() { return new Date().toISOString().split('T')[0]; }
+function getYesterdayStr() { const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0]; }
+function formatDate(str) {
+  if(!str) return '—';
+  const d=new Date(str+'T00:00:00');
+  const days=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+function formatRp(n) { if(!n) return 'Rp 0'; return 'Rp '+Number(n).toLocaleString('id-ID'); }
+function isAfterWork() { const now=new Date(); return now.getHours()>=16; }
+function progColor(p) { return p<50?'var(--red)':p<80?'var(--orange)':'var(--green)'; }
+function initials(name) { return (name||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase(); }
+function toast(msg, dur=3000) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), dur);
+}
+function showModal(html) {
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+window.closeModal = function(e) { if(e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').style.display='none'; }
+window._closeModal = function() { document.getElementById('modal-overlay').style.display='none'; }
+
+// ── CLOCK ──
+function startClock() {
+  function tick() {
+    const now=new Date();
+    const h=String(now.getHours()).padStart(2,'0');
+    const m=String(now.getMinutes()).padStart(2,'0');
+    const s=String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent=`${h}:${m}:${s} WIB`;
+    document.getElementById('tb-date').textContent=formatDate(getTodayStr());
+    today=getTodayStr();
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ── LOAD USERS FOR LOGIN DROPDOWN ──
+async function loadUsersForLogin() {
+  try {
+    const snap = await getDocs(collection(db,'users'));
+    ALL_USERS = snap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
+    const sel = document.getElementById('login-user');
+    sel.innerHTML = '<option value="">— Pilih Pengguna —</option>';
+    ALL_USERS.sort((a,b)=>a.name.localeCompare(b.name)).forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.name} — ${u.label}`;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    document.getElementById('login-user').innerHTML = '<option value="">⚠ Gagal memuat data</option>';
+    console.error(e);
+  }
+}
+loadUsersForLogin();
+
+// ── LOGIN ──
+window.doLogin = async function() {
+  const uid = document.getElementById('login-user').value;
+  const pass = document.getElementById('login-pass').value.trim();
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  const ldg = document.getElementById('login-loading');
+  err.textContent = '';
+  if(!uid){err.textContent='Pilih pengguna terlebih dahulu.';return;}
+  if(!pass){err.textContent='Masukkan password.';return;}
+  btn.disabled=true; ldg.style.display='block';
+  try {
+    const snap = await getDoc(doc(db,'users',uid));
+    if(!snap.exists()){err.textContent='Pengguna tidak ditemukan.';return;}
+    const u={id:snap.id,...snap.data()};
+    if(u.pass !== pass){err.textContent='Password salah.';return;}
+    if(u.active===false){err.textContent='Akun dinonaktifkan. Hubungi admin.';return;}
+    CU = u;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    initApp();
+  } catch(e) {
+    err.textContent='Error: '+e.message;
+  } finally {
+    btn.disabled=false; ldg.style.display='none';
+  }
+};
+document.getElementById('login-pass').addEventListener('keyup',e=>{if(e.key==='Enter')doLogin();});
+
+window.doLogout = function() {
+  CU=null;
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-err').textContent='';
+  document.getElementById('login-user').value='';
+};
+
+// ── INIT APP ──
+function initApp() {
+  document.getElementById('tb-user').textContent=`${CU.name} — ${CU.label}`;
+  startClock();
+  if(CU.role==='admin'||CU.role==='kadis') document.getElementById('nav-users').style.display='flex';
+  showPage('executive');
+}
+
+// ── NAVIGATION ──
+window.showPage = function(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const ni=document.getElementById('nav-'+id);
+  if(ni)ni.classList.add('active');
+  renderPage(id);
+};
+function renderPage(id) {
+  const map={executive:renderExecutive,daily:renderDaily,realisasi:renderRealisasi,indikator:renderIndikator,log:renderLog,validasi:renderValidasi,users:renderUsers};
+  if(map[id]) map[id]();
+}
+
+// ══════════════════════════════════════
+// EXECUTIVE VIEW
+// ══════════════════════════════════════
+async function renderExecutive() {
+  const el = document.getElementById('page-executive');
+  el.innerHTML = `<div class="page-title">Executive View</div><div class="page-sub">${formatDate(today)}</div><div style="text-align:center;padding:40px"><span class="loading-spinner"></span> Memuat data...</div>`;
+
+  // Fetch realisasi all units
+  const realSnap = await getDocs(collection(db,'realisasi'));
+  const realAll = realSnap.docs.map(d=>({id:d.id,...d.data()}));
+
+  let totAnggaran=0,totKreal=0,totFItems=0,totFCnt=0;
+  const unitReal={};
+  UNIT_KEYS.forEach(u=>{unitReal[u]={fSum:0,fCnt:0,anggaran:0,kreal:0}});
+  realAll.forEach(k=>{
+    const u=k.unit;
+    if(!u||!UNIT_KEYS.includes(u)) return;
+    totAnggaran+=Number(k.anggaran||0);
+    totKreal+=Number(k.kreal||0);
+    totFCnt++;
+    totFItems+=Number(k.freal||0);
+    unitReal[u].fSum+=Number(k.freal||0);
+    unitReal[u].fCnt++;
+    unitReal[u].anggaran+=Number(k.anggaran||0);
+    unitReal[u].kreal+=Number(k.kreal||0);
+  });
+  const avgF=totFCnt?Math.round(totFItems/totFCnt):0;
+  const kPct=totAnggaran?Math.round(totKreal/totAnggaran*100):0;
+
+  // Fetch indikators
+  const indSnap = await getDocs(collection(db,'indikators'));
+  const indAll = indSnap.docs.map(d=>({id:d.id,...d.data()}));
+
+  // Fetch star5 yesterday
+  const yest=getYesterdayStr();
+  const logSnap=await getDocs(query(collection(db,'logs'),where('type','==','star5'),where('date','==',yest)));
+  const star5=logSnap.docs.map(d=>d.data());
+
+  // Build HTML
+  let h=`<div class="page-title">Executive View</div>
+  <div class="page-sub" id="exec-date">Ringkasan Kinerja — ${formatDate(today)}</div>
+  <div class="g4" style="margin-bottom:20px">
+    <div class="stat-card"><div class="stat-num">${avgF}%</div><div class="stat-lbl">Rata-rata Realisasi Fisik</div></div>
+    <div class="stat-card"><div class="stat-num">${kPct}%</div><div class="stat-lbl">Realisasi Keuangan</div></div>
+    <div class="stat-card"><div class="stat-num">${formatRp(totAnggaran)}</div><div class="stat-lbl">Total Anggaran Dinas</div></div>
+    <div class="stat-card"><div class="stat-num">${formatRp(totKreal)}</div><div class="stat-lbl">Total Realisasi Keuangan</div></div>
+  </div>
+  <div class="g2" style="margin-bottom:20px">
+    <div class="card"><div class="card-header"><span class="card-title">📈 Realisasi Fisik per Unit</span></div>`;
+
+  // Charts
+  h+=`<div class="bar-chart">`;
+  UNIT_KEYS.forEach(u=>{
+    const d=unitReal[u];
+    const v=d.fCnt?Math.round(d.fSum/d.fCnt):0;
+    const ht=Math.round(v/100*140);
+    const col=progColor(v);
+    h+=`<div class="bar-col">
+      <div class="bar-val">${v}%</div>
+      <div class="bar-body" style="height:${ht}px;background:${col}"></div>
+      <div class="bar-lbl">${UNITS[u].replace('Bidang ','').replace('Sekretariat','Sekret.')}</div>
+    </div>`;
+  });
+  h+=`</div></div>
+  <div class="card"><div class="card-header"><span class="card-title">💰 Realisasi Keuangan per Unit</span></div>
+  <div class="bar-chart">`;
+  UNIT_KEYS.forEach(u=>{
+    const d=unitReal[u];
+    const v=d.anggaran?Math.round(d.kreal/d.anggaran*100):0;
+    const ht=Math.round(v/100*140);
+    const col=progColor(v);
+    h+=`<div class="bar-col">
+      <div class="bar-val">${v}%</div>
+      <div class="bar-body" style="height:${ht}px;background:${col}"></div>
+      <div class="bar-lbl">${UNITS[u].replace('Bidang ','').replace('Sekretariat','Sekret.')}</div>
+    </div>`;
+  });
+  h+=`</div></div></div>`;
+
+  // Indikator summary
+  h+=`<div class="card" style="margin-bottom:20px"><div class="card-header"><span class="card-title">🎯 Capaian Indikator per Bidang</span></div>`;
+  UNIT_KEYS.forEach(u=>{
+    const items=indAll.filter(i=>i.unit===u&&i.active!==false);
+    if(!items.length) return;
+    h+=`<div style="margin-bottom:16px"><div class="fw6 text-gold mb-8" style="font-size:13px;margin-bottom:8px">${UNITS[u]}</div>`;
+    items.forEach(item=>{
+      const real=parseFloat(item.realisasi)||0;
+      const tgt=parseFloat(item.targetBulan)||0;
+      const pct=tgt>0?Math.min(Math.round(real/tgt*100),150):null;
+      const col=pct===null?'var(--text3)':pct<70?'var(--red)':pct<90?'var(--orange)':'var(--green)';
+      h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:12px">
+        <div style="flex:2;color:var(--text2)">${item.nama}</div>
+        <div style="flex:1;display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(pct||0,100)}%;background:${col};border-radius:2px"></div>
+          </div>
+          <span style="font-family:'DM Mono',monospace;color:${col};font-size:12px;min-width:36px">${pct!==null?pct+'%':'—'}</span>
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+  });
+  h+=`</div>`;
+
+  // Star5
+  h+=`<div class="card"><div class="card-header"><span class="card-title">⭐ Penghargaan Bintang 5 — Kemarin</span><span class="card-badge">TERKINI</span></div>`;
+  if(!star5.length) {
+    h+=`<div class="empty-state"><div class="empty-icon">🌟</div><div>Tidak ada penerima bintang 5 kemarin.</div></div>`;
+  } else {
+    star5.forEach(l=>{
+      h+=`<div class="star-card">
+        <div class="star-avatar">${initials(l.userName)}</div>
+        <div>
+          <div class="star-name">${l.userName}</div>
+          <div class="star-unit">${l.userLabel||''}</div>
+          <div class="text-sm text-muted mt-8" style="margin-top:6px">🎉 Mendapat nilai ⭐⭐⭐⭐⭐ dari atasan langsung</div>
+        </div>
+        <div style="margin-left:auto;font-size:32px">🌟</div>
+      </div>`;
+    });
+  }
+  h+=`</div>`;
+  el.innerHTML=h;
+}
+
+// ══════════════════════════════════════
+// DAILY
+// ══════════════════════════════════════
+async function renderDaily() {
+  const el=document.getElementById('page-daily');
+  el.innerHTML=`<div class="page-title">Catatan Harian</div><div class="page-sub">${CU.name} — ${formatDate(today)}</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+
+  let h=`<div class="page-title">Catatan Harian</div><div class="page-sub">${CU.name} — ${formatDate(today)}</div>`;
+
+  if(CU.role==='kadis') { h+=renderKadisDaily(); el.innerHTML=h; return; }
+  if(CU.role==='admin') { h+=`<div class="card"><p class="text-muted">Admin tidak memiliki catatan harian. Gunakan menu Manajemen User.</p></div>`; el.innerHTML=h; return; }
+  if(CU.role==='kabid') h+=renderKabidFormHtml(data);
+  else if(CU.role==='kasubag') h+=renderKasubagFormHtml(data);
+  else h+=renderStafFormHtml(data);
+
+  el.innerHTML=h;
+  attachDailyEvents(data);
+}
+
+function renderKadisDaily() {
+  return `<div class="card"><div class="card-header"><span class="card-title">👑 Dashboard Kepala Dinas</span><span class="card-badge">dr Budi Andri, MKM</span></div>
+    <p class="text-muted mb-12" style="margin-bottom:12px">Gunakan menu di bawah untuk mengelola dashboard.</p>
+    <div class="flex gap-12" style="flex-wrap:wrap">
+      <button class="btn btn-gold" onclick="showPage('validasi')">✅ Validasi Catatan Kabid/Sekretaris</button>
+      <button class="btn btn-teal" onclick="showPage('executive')">📊 Executive View</button>
+      <button class="btn btn-teal" onclick="showPage('log')">📜 Log Kegiatan</button>
+    </div>
+  </div>`;
+}
+
+function progSelectHtml(val, id, disabled) {
+  const opts=[0,10,20,30,40,50,60,70,80,90,100].map(v=>`<option value="${v}" ${parseInt(val||0)===v?'selected':''}>${v}%</option>`).join('');
+  return `<select class="fs" id="${id}" style="width:110px" ${disabled?'disabled':''}>${opts}</select>`;
+}
+
+function renderKabidFormHtml(data) {
+  const works=data.works||[{},{},{}];
+  const locked=isAfterWork();
+  let h=`<div class="card"><div class="card-header"><span class="card-title">📋 Pekerjaan Strategis — ${formatDate(today)}</span><span class="card-badge">${CU.label}</span></div><div class="work-boxes">`;
+  for(let i=0;i<3;i++){
+    const w=works[i]||{};
+    const lk=locked||w.validatedKadis;
+    const pct=parseInt(w.progress||0);
+    h+=`<div class="work-box ${lk?'locked':''}">
+      <div class="work-box-num">📌 Pekerjaan ${i+1}</div>
+      <div class="fr"><label class="fl">Pekerjaan Strategis</label><textarea class="ft" id="wk-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan strategis...">${w.desc||''}</textarea></div>
+      <div class="fr"><label class="fl">Output</label><input class="fi" id="wk-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${w.output||''}"></div>
+      <div class="fr"><label class="fl">Target Waktu</label><input type="date" class="fi" id="wk-tgt-${i}" ${lk?'disabled':''} value="${w.target||''}"></div>
+      <div class="fr"><label class="fl">Progres</label>
+        <div class="flex-c gap-8">${progSelectHtml(pct,'wk-prog-'+i,lk)}
+          <div class="prog-wrap"><div class="prog-fill" id="wk-bar-${i}" style="width:${pct}%;background:${progColor(pct)}"></div></div>
+          <span class="prog-pct" id="wk-pct-${i}">${pct}%</span></div></div>
+      <div class="val-section"><div class="val-title">✅ Catatan Kepala Dinas</div>
+        <textarea class="ft" disabled style="min-height:44px">${w.noteKadis||'(Belum ada catatan)'}</textarea>
+        <div class="mt-8">${w.validatedKadis?`<span class="badge badge-green">✅ Tervalidasi Kepala Dinas</span>`:`<span class="badge badge-orange">⏳ Menunggu Validasi</span>`}</div>
+      </div>
+    </div>`;
+  }
+  h+=`</div>`;
+  if(!locked) h+=`<div style="margin-top:14px"><button class="btn btn-gold" id="btn-save-kabid">💾 Simpan Catatan</button></div>`;
+  h+=`</div>`;
+  return h;
+}
+
+function renderKasubagFormHtml(data) {
+  const works=data.works||[{},{},{}];
+  const urgent=data.urgent||[{},{},{}];
+  const locked=isAfterWork();
+  let h=`<div class="card"><div class="card-header"><span class="card-title">📋 Pekerjaan Reguler — ${formatDate(today)}</span><span class="card-badge">${CU.label}</span></div><div class="work-boxes">`;
+  for(let i=0;i<3;i++){
+    const w=works[i]||{};
+    const lk=locked||w.validated;
+    const pct=parseInt(w.progress||0);
+    h+=`<div class="work-box ${lk?'locked':''}">
+      <div class="work-box-num">📌 Reguler ${i+1}</div>
+      <div class="fr"><label class="fl">Pekerjaan</label><textarea class="ft" id="ws-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan...">${w.desc||''}</textarea></div>
+      <div class="fr"><label class="fl">Output</label><input class="fi" id="ws-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${w.output||''}"></div>
+      <div class="fr"><label class="fl">Target</label><input type="date" class="fi" id="ws-tgt-${i}" ${lk?'disabled':''} value="${w.target||''}"></div>
+      <div class="fr"><label class="fl">Progres</label>
+        <div class="flex-c gap-8">${progSelectHtml(pct,'ws-prog-'+i,lk)}
+          <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)}"></div></div>
+          <span class="prog-pct">${pct}%</span></div></div>
+      <div class="val-section"><div class="val-title">✅ Catatan Atasan</div>
+        <textarea class="ft" disabled style="min-height:40px">${w.noteAtasan||'(Belum ada catatan)'}</textarea>
+        <div class="mt-8">${w.validated?`<span class="badge badge-green">✅ Tervalidasi</span>`:`<span class="badge badge-orange">⏳ Belum Divalidasi</span>`}</div>
+      </div></div>`;
+  }
+  h+=`</div>`;
+  if(!locked) h+=`<button class="btn btn-gold mt-12" style="margin-top:12px" id="btn-save-ws">💾 Simpan Reguler</button>`;
+  h+=`</div>`;
+
+  h+=`<div class="card"><div class="card-header"><span class="card-title">🚨 Pekerjaan Mendesak</span><span class="card-badge" style="background:rgba(229,62,62,0.15);color:#fc8181">URGENT</span></div><div class="work-boxes">`;
+  for(let i=0;i<3;i++){
+    const u=urgent[i]||{};
+    const lk=locked||u.validated;
+    const pct=parseInt(u.progress||0);
+    h+=`<div class="work-box ${lk?'locked':''}" style="border-color:rgba(229,62,62,0.3)">
+      <div class="work-box-num" style="color:var(--red)">🚨 Mendesak ${i+1}</div>
+      <div class="fr"><label class="fl">Pekerjaan Mendesak</label><textarea class="ft" id="wu-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan mendesak...">${u.desc||''}</textarea></div>
+      <div class="fr"><label class="fl">Output</label><input class="fi" id="wu-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${u.output||''}"></div>
+      <div class="fr"><label class="fl">Target</label><input type="date" class="fi" id="wu-tgt-${i}" ${lk?'disabled':''} value="${u.target||''}"></div>
+      <div class="fr"><label class="fl">Progres</label>
+        <div class="flex-c gap-8">${progSelectHtml(pct,'wu-prog-'+i,lk)}
+          <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:var(--red)"></div></div>
+          <span class="prog-pct">${pct}%</span></div></div>
+      <div class="val-section"><div class="val-title" style="color:var(--red)">⚡ Catatan Atasan</div>
+        <textarea class="ft" disabled style="min-height:40px">${u.noteAtasan||'(Belum ada catatan)'}</textarea>
+        <div class="mt-8">${u.validated?`<span class="badge badge-green">✅ Tervalidasi</span>`:`<span class="badge badge-orange">⏳ Belum Divalidasi</span>`}</div>
+      </div></div>`;
+  }
+  h+=`</div>`;
+  if(!locked) h+=`<button class="btn btn-red mt-12" style="margin-top:12px" id="btn-save-wu">💾 Simpan Mendesak</button>`;
+  h+=`</div>`;
+  return h;
+}
+
+function renderStafFormHtml(data) {
+  const tasks=data.tasks||[{},{},{}];
+  const locked=isAfterWork();
+  const sup=ALL_USERS.find(u=>u.id===CU.superior);
+  let h=`<div class="card"><div class="card-header"><span class="card-title">📋 Rencana Kegiatan — ${formatDate(today)}</span><span class="card-badge">${CU.label}</span></div>
+  <div id="staf-tasks-wrap">`;
+  tasks.forEach((t,i)=>{
+    const lk=locked||data.validated;
+    h+=`<div class="work-box mb-12" style="margin-bottom:12px" id="stask-${i}">
+      <div class="work-box-num">📌 Kegiatan ${i+1}</div>
+      <div class="fr"><label class="fl">Rencana Kegiatan</label><textarea class="ft" id="st-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan kegiatan hari ini...">${t.desc||''}</textarea></div>
+      <div class="fr"><label class="fl">Output Kegiatan</label><input class="fi" id="st-out-${i}" ${lk?'disabled':''} placeholder="Output yang dihasilkan..." value="${t.output||''}"></div>
+      <div class="flex-b fr">
+        <label class="fl" style="margin:0">Status</label>
+        ${lk ? (t.tuntas?`<span class="badge badge-green">✅ Tuntas</span>`:`<span class="badge badge-orange">⏳ Belum Tuntas</span>`)
+              : `<div class="flex gap-8"><button class="btn btn-green btn-sm" onclick="_setTask(${i},true)">✅ Tuntas</button><button class="btn btn-red btn-sm" onclick="_setTask(${i},false)">⏳ Belum</button></div>`}
+      </div></div>`;
+  });
+  h+=`</div>`;
+  if(!locked&&!data.validated) h+=`<div class="flex gap-8 mt-12" style="margin-top:12px">
+    <button class="btn btn-teal btn-sm" onclick="_addTask()">➕ Tambah Kegiatan</button>
+    <button class="btn btn-gold" id="btn-save-staf">💾 Simpan</button>
+  </div>`;
+  h+=`</div>`;
+
+  h+=`<div class="card"><div class="card-header"><span class="card-title">✅ Validasi & Penilaian Atasan</span></div>
+  <div class="fr"><label class="fl">Catatan / Instruksi Atasan</label>
+    <textarea class="ft" disabled>${data.validNote||'(Belum ada catatan dari atasan)'}</textarea></div>
+  <div class="fr"><label class="fl">Nilai Bintang</label>
+    <div class="stars">`;
+  for(let s=1;s<=5;s++) h+=`<span class="star ${(data.stars||0)>=s?'on':''}" style="cursor:default">★</span>`;
+  h+=`</div></div>`;
+  h+=data.validated?`<span class="badge badge-green">✅ Tervalidasi oleh ${sup?.name||'Atasan'}</span>`:`<span class="badge badge-orange">⏳ Belum Divalidasi</span>`;
+  h+=`</div>`;
+  return h;
+}
+
+function attachDailyEvents(data) {
+  // Progress live update
+  [0,1,2].forEach(i=>{
+    const selK=document.getElementById('wk-prog-'+i);
+    if(selK) selK.addEventListener('change',()=>{
+      const v=parseInt(selK.value);
+      const bar=document.getElementById('wk-bar-'+i);
+      const pct=document.getElementById('wk-pct-'+i);
+      if(bar) bar.style.cssText=`width:${v}%;background:${progColor(v)}`;
+      if(pct) pct.textContent=v+'%';
+    });
+  });
+
+  // Save kabid
+  const bK=document.getElementById('btn-save-kabid');
+  if(bK) bK.onclick=()=>saveKabidWorks(data);
+
+  // Save kasubag
+  const bWS=document.getElementById('btn-save-ws');
+  if(bWS) bWS.onclick=()=>saveKasubagWorks(data);
+  const bWU=document.getElementById('btn-save-wu');
+  if(bWU) bWU.onclick=()=>saveKasubagUrgent(data);
+
+  // Save staf
+  const bS=document.getElementById('btn-save-staf');
+  if(bS) bS.onclick=()=>saveStafTasks(data);
+}
+
+async function saveKabidWorks(existing) {
+  const key=`daily_${CU.id}_${today}`;
+  const works=[];
+  for(let i=0;i<3;i++){
+    const ex=(existing.works||[])[i]||{};
+    if(ex.validatedKadis){works.push(ex);continue;}
+    const desc=document.getElementById(`wk-desc-${i}`)?.value||'';
+    const prog=parseInt(document.getElementById(`wk-prog-${i}`)?.value||0);
+    works.push({desc, output:document.getElementById(`wk-out-${i}`)?.value||'', target:document.getElementById(`wk-tgt-${i}`)?.value||'', progress:prog, validatedKadis:false, noteKadis:ex.noteKadis||''});
+    if(prog===100&&desc) await addLog({type:'kabid_work',user:CU.id,userName:CU.name,userLabel:CU.label,unit:CU.unit,date:today,desc,output:document.getElementById(`wk-out-${i}`)?.value||''});
+  }
+  await setDoc(doc(db,'daily',key),{...existing,works,updatedAt:new Date().toISOString()},{merge:true});
+  toast('✅ Catatan berhasil disimpan!'); renderDaily();
+}
+
+async function saveKasubagWorks(existing) {
+  const key=`daily_${CU.id}_${today}`;
+  const works=[];
+  for(let i=0;i<3;i++){
+    const ex=(existing.works||[])[i]||{};
+    if(ex.validated){works.push(ex);continue;}
+    const desc=document.getElementById(`ws-desc-${i}`)?.value||'';
+    const prog=parseInt(document.getElementById(`ws-prog-${i}`)?.value||0);
+    works.push({desc, output:document.getElementById(`ws-out-${i}`)?.value||'', target:document.getElementById(`ws-tgt-${i}`)?.value||'', progress:prog, validated:false, noteAtasan:ex.noteAtasan||''});
+    if(prog===100&&desc) await addLog({type:'kasubag_work',user:CU.id,userName:CU.name,userLabel:CU.label,unit:CU.unit,date:today,desc});
+  }
+  await setDoc(doc(db,'daily',key),{...existing,works,updatedAt:new Date().toISOString()},{merge:true});
+  toast('✅ Pekerjaan reguler disimpan!'); renderDaily();
+}
+
+async function saveKasubagUrgent(existing) {
+  const key=`daily_${CU.id}_${today}`;
+  const urgent=[];
+  for(let i=0;i<3;i++){
+    const ex=(existing.urgent||[])[i]||{};
+    if(ex.validated){urgent.push(ex);continue;}
+    const desc=document.getElementById(`wu-desc-${i}`)?.value||'';
+    const prog=parseInt(document.getElementById(`wu-prog-${i}`)?.value||0);
+    urgent.push({desc, output:document.getElementById(`wu-out-${i}`)?.value||'', target:document.getElementById(`wu-tgt-${i}`)?.value||'', progress:prog, validated:false, noteAtasan:ex.noteAtasan||''});
+    if(prog===100&&desc) await addLog({type:'kasubag_urgent',user:CU.id,userName:CU.name,userLabel:CU.label,unit:CU.unit,date:today,desc});
+  }
+  await setDoc(doc(db,'daily',key),{...existing,urgent,updatedAt:new Date().toISOString()},{merge:true});
+  toast('✅ Pekerjaan mendesak disimpan!'); renderDaily();
+}
+
+window._setTask = async function(i, tuntas) {
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  if(!data.tasks) data.tasks=[];
+  while(data.tasks.length<=i) data.tasks.push({});
+  data.tasks[i].tuntas=tuntas;
+  data.tasks[i].desc=document.getElementById(`st-desc-${i}`)?.value||data.tasks[i].desc||'';
+  data.tasks[i].output=document.getElementById(`st-out-${i}`)?.value||data.tasks[i].output||'';
+  await setDoc(doc(db,'daily',key),data,{merge:false});
+  renderDaily();
+};
+window._addTask = async function() {
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  // Save current values first
+  const tasks=data.tasks||[];
+  tasks.forEach((t,i)=>{
+    t.desc=document.getElementById(`st-desc-${i}`)?.value||t.desc||'';
+    t.output=document.getElementById(`st-out-${i}`)?.value||t.output||'';
+  });
+  tasks.push({});
+  data.tasks=tasks;
+  await setDoc(doc(db,'daily',key),data,{merge:false});
+  renderDaily();
+};
+async function saveStafTasks(existing) {
+  const key=`daily_${CU.id}_${today}`;
+  const tasks=(existing.tasks||[]).map((t,i)=>({
+    ...t,
+    desc:document.getElementById(`st-desc-${i}`)?.value||t.desc||'',
+    output:document.getElementById(`st-out-${i}`)?.value||t.output||''
+  }));
+  for(const t of tasks) {
+    if(t.tuntas&&t.desc) await addLog({type:'staf_task',user:CU.id,userName:CU.name,userLabel:CU.label,unit:CU.unit,date:today,desc:t.desc,output:t.output||''});
+  }
+  await setDoc(doc(db,'daily',key),{...existing,tasks,updatedAt:new Date().toISOString()},{merge:true});
+  toast('✅ Kegiatan disimpan!'); renderDaily();
+}
+
+async function addLog(entry) {
+  await addDoc(collection(db,'logs'),{...entry,savedAt:new Date().toISOString()});
+}
+
+// ══════════════════════════════════════
+// VALIDASI
+// ══════════════════════════════════════
+async function renderValidasi() {
+  const el=document.getElementById('page-validasi');
+  el.innerHTML=`<div class="page-title">Validasi Atasan</div><div class="page-sub">Validasi catatan bawahan langsung — ${formatDate(today)}</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  // Load all users from Firestore
+  const usSnap=await getDocs(collection(db,'users'));
+  ALL_USERS=usSnap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
+
+  let reports=[];
+  if(CU.role==='kadis') reports=ALL_USERS.filter(u=>u.role==='kabid'||u.id==='sekretaris');
+  else reports=ALL_USERS.filter(u=>u.superior===CU.id);
+
+  let h=`<div class="page-title">Validasi Atasan</div><div class="page-sub">Validasi catatan bawahan langsung — ${formatDate(today)}</div>`;
+
+  if(!reports.length){h+=`<div class="card"><p class="text-muted">Tidak ada bawahan langsung.</p></div>`;el.innerHTML=h;return;}
+
+  for(const rep of reports){
+    const key=`daily_${rep.id}_${today}`;
+    const snap=await getDoc(doc(db,'daily',key));
+    const data=snap.exists()?snap.data():{};
+    h+=`<div class="card"><div class="card-header"><span class="card-title">👤 ${rep.name}</span><span class="card-badge">${rep.label}</span></div>`;
+
+    if(rep.role==='staf'){
+      const tasks=data.tasks||[];
+      if(!tasks.length){h+=`<p class="text-muted text-sm">Belum ada catatan kegiatan hari ini.</p>`;h+=`</div>`;continue;}
+      tasks.forEach((t,i)=>{
+        h+=`<div class="work-box mb-12" style="margin-bottom:12px">
+          <div class="work-box-num">Kegiatan ${i+1}</div>
+          <div class="fw6">${t.desc||'—'}</div>
+          <div class="text-muted text-sm mt-8" style="margin-top:6px">Output: ${t.output||'—'}</div>
+          <div class="mt-8">${t.tuntas?`<span class="badge badge-green">✅ Tuntas</span>`:`<span class="badge badge-orange">⏳ Belum Tuntas</span>`}</div>
+        </div>`;
+      });
+      h+=`<div class="val-section">`;
+      if(!data.validated){
+        h+=`<div class="fr"><label class="fl">Catatan / Instruksi</label><textarea class="ft" id="val-note-${rep.id}" placeholder="Tulis catatan..."></textarea></div>
+          <div class="fr"><label class="fl">Nilai Bintang</label>
+          <div class="stars" id="val-stars-${rep.id}">`;
+        for(let s=1;s<=5;s++) h+=`<span class="star" onclick="_setValStar('${rep.id}',${s})">★</span>`;
+        h+=`</div></div><button class="btn btn-gold btn-sm" onclick="_validateStaf('${rep.id}')">✅ Validasi & Simpan</button>`;
+      } else {
+        h+=`<span class="badge badge-green">✅ Sudah Divalidasi</span>
+          <div class="text-sm text-muted mt-8" style="margin-top:6px">Catatan: ${data.validNote||'—'}</div>
+          <div class="stars mt-8" style="margin-top:6px">`;
+        for(let s=1;s<=5;s++) h+=`<span class="star ${(data.stars||0)>=s?'on':''}" style="cursor:default">★</span>`;
+        h+=`</div>`;
+      }
+      h+=`</div>`;
+    }
+
+    else if(rep.role==='kabid'||rep.role==='sekretaris'){
+      const works=data.works||[];
+      if(!works.filter(w=>w.desc).length){h+=`<p class="text-muted text-sm">Belum ada pekerjaan hari ini.</p>`;h+=`</div>`;continue;}
+      works.forEach((w,i)=>{
+        if(!w.desc) return;
+        const pct=parseInt(w.progress||0);
+        h+=`<div class="work-box mb-12" style="margin-bottom:12px">
+          <div class="work-box-num">Pekerjaan ${i+1}</div>
+          <div class="fw6">${w.desc}</div>
+          <div class="text-sm text-muted">Output: ${w.output||'—'} | Target: ${w.target||'—'}</div>
+          <div class="prog-row mt-8" style="margin-top:8px">
+            <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)}"></div></div>
+            <span class="prog-pct">${pct}%</span>
+          </div>`;
+        if(!w.validatedKadis){
+          h+=`<div class="val-section">
+            <textarea class="ft" id="kv-note-${rep.id}-${i}" placeholder="Catatan Kepala Dinas..." style="min-height:48px">${w.noteKadis||''}</textarea>
+            <button class="btn btn-gold btn-sm mt-8" style="margin-top:8px" onclick="_validateKabidWork('${rep.id}',${i})">✅ Validasi</button>
+          </div>`;
+        } else {
+          h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span><div class="text-sm text-muted mt-8" style="margin-top:6px">${w.noteKadis||''}</div></div>`;
+        }
+        h+=`</div>`;
+      });
+    }
+
+    else if(rep.role==='kasubag'){
+      const works=data.works||[];
+      const urgent=data.urgent||[];
+      const allItems=[...works.map((w,i)=>({...w,type:'reg',idx:i})),...urgent.map((u,i)=>({...u,type:'urg',idx:i}))];
+      if(!allItems.filter(x=>x.desc).length){h+=`<p class="text-muted text-sm">Belum ada pekerjaan hari ini.</p>`;h+=`</div>`;continue;}
+      allItems.forEach(item=>{
+        if(!item.desc) return;
+        const pct=parseInt(item.progress||0);
+        h+=`<div class="work-box mb-12" style="margin-bottom:12px;${item.type==='urg'?'border-color:rgba(229,62,62,0.35)':''}">
+          <div class="work-box-num" ${item.type==='urg'?'style="color:var(--red)"':''}>${item.type==='urg'?'🚨 Mendesak':'📌 Reguler'} ${item.idx+1}</div>
+          <div class="fw6">${item.desc}</div>
+          <div class="text-sm text-muted">Output: ${item.output||'—'} | Target: ${item.target||'—'}</div>
+          <div class="prog-row mt-8" style="margin-top:8px">
+            <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${item.type==='urg'?'var(--red)':progColor(pct)}"></div></div>
+            <span class="prog-pct">${pct}%</span>
+          </div>`;
+        if(!item.validated){
+          h+=`<div class="val-section">
+            <textarea class="ft" id="sv-note-${rep.id}-${item.type}-${item.idx}" placeholder="Catatan atasan..." style="min-height:44px"></textarea>
+            <button class="btn btn-teal btn-sm mt-8" style="margin-top:8px" onclick="_validateKasubag('${rep.id}','${item.type}',${item.idx})">✅ Validasi</button>
+          </div>`;
+        } else {
+          h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span><div class="text-sm text-muted mt-8" style="margin-top:6px">${item.noteAtasan||''}</div></div>`;
+        }
+        h+=`</div>`;
+      });
+    }
+    h+=`</div>`;
+  }
+  el.innerHTML=h;
+}
+
+window._setValStar=function(repId,n){
+  valStarsMap[repId]=n;
+  document.querySelectorAll(`#val-stars-${repId} .star`).forEach((s,i)=>s.classList.toggle('on',i<n));
+};
+window._validateStaf=async function(repId){
+  const note=document.getElementById(`val-note-${repId}`)?.value||'';
+  const stars=valStarsMap[repId]||0;
+  const key=`daily_${repId}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  data.validated=true; data.validNote=note; data.stars=stars;
+  await setDoc(doc(db,'daily',key),data,{merge:false});
+  if(stars===5){
+    const u=ALL_USERS.find(x=>x.id===repId);
+    await addLog({type:'star5',user:repId,userName:u?.name||repId,userLabel:u?.label||'',date:today});
+  }
+  const u=ALL_USERS.find(x=>x.id===repId);
+  toast(`✅ Validasi untuk ${u?.name||repId} berhasil!`);
+  renderValidasi();
+};
+window._validateKabidWork=async function(repId,idx){
+  const note=document.getElementById(`kv-note-${repId}-${idx}`)?.value||'';
+  const key=`daily_${repId}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  if(data.works&&data.works[idx]){data.works[idx].validatedKadis=true;data.works[idx].noteKadis=note;}
+  await setDoc(doc(db,'daily',key),data,{merge:false});
+  toast('✅ Pekerjaan tervalidasi!'); renderValidasi();
+};
+window._validateKasubag=async function(repId,type,idx){
+  const note=document.getElementById(`sv-note-${repId}-${type}-${idx}`)?.value||'';
+  const key=`daily_${repId}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  const arr=type==='urg'?'urgent':'works';
+  if(data[arr]&&data[arr][idx]){data[arr][idx].validated=true;data[arr][idx].noteAtasan=note;}
+  await setDoc(doc(db,'daily',key),data,{merge:false});
+  toast('✅ Pekerjaan tervalidasi!'); renderValidasi();
+};
+
+// ══════════════════════════════════════
+// REALISASI
+// ══════════════════════════════════════
+async function renderRealisasi() {
+  const el=document.getElementById('page-realisasi');
+  el.innerHTML=`<div class="page-title">Realisasi Fisik & Keuangan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+  const unit=CU.unit;
+  const unitName=UNITS[unit]||unit;
+  const canEdit=['kabid','kasubag','sekretaris'].includes(CU.role)||CU.role==='admin';
+
+  const snap=await getDocs(query(collection(db,'realisasi'),where('unit','==',unit)));
+  const items=snap.docs.map(d=>({id:d.id,...d.data()}));
+
+  let h=`<div class="page-title">Realisasi Fisik & Keuangan</div>
+  <div class="page-sub">${unitName} — Monitoring bulanan</div>`;
+
+  if(canEdit){
+    h+=`<div class="card"><div class="card-header"><span class="card-title">➕ Tambah Kegiatan</span></div>
+      <div class="g2">
+        <div class="fr"><label class="fl">Nama Kegiatan</label><input class="fi" id="rl-nama" placeholder="Nama kegiatan..."></div>
+        <div class="fr"><label class="fl">Anggaran (Rp)</label><input type="number" class="fi" id="rl-anggaran" placeholder="0"></div>
+        <div class="fr"><label class="fl">Realisasi Fisik Time Schedule (%)</label><input type="number" class="fi" id="rl-fts" min="0" max="100" placeholder="0"></div>
+        <div class="fr"><label class="fl">Realisasi Fisik Tercapai (%)</label><input type="number" class="fi" id="rl-freal" min="0" max="100" placeholder="0"></div>
+        <div class="fr"><label class="fl">Realisasi Keuangan Kas (Rp)</label><input type="number" class="fi" id="rl-kts" placeholder="0"></div>
+        <div class="fr"><label class="fl">Realisasi Keuangan Tercapai (Rp)</label><input type="number" class="fi" id="rl-kreal" placeholder="0"></div>
+        <div class="fr"><label class="fl">Permasalahan</label><textarea class="ft" id="rl-masalah" placeholder="Permasalahan..."></textarea></div>
+        <div class="fr"><label class="fl">Rencana Tindak Lanjut</label><textarea class="ft" id="rl-rtl" placeholder="RTL..."></textarea></div>
+      </div>
+      <button class="btn btn-gold mt-8" style="margin-top:8px" onclick="_addReal('${unit}')">➕ Tambah Kegiatan</button>
+    </div>`;
+  }
+
+  h+=`<div class="card"><div class="card-header"><span class="card-title">📊 Data Realisasi — ${unitName}</span><span class="card-badge">${items.length} kegiatan</span></div>`;
+  if(!items.length){
+    h+=`<div class="empty-state"><div class="empty-icon">📋</div><div>Belum ada data kegiatan.</div></div>`;
+  } else {
+    h+=`<div class="tbl-wrap"><table><thead><tr>
+      <th>Nama Kegiatan</th><th>Anggaran</th>
+      <th>Real.Fisik TS</th><th>Capaian Fisik</th>
+      <th>Keu.Kas</th><th>Capaian Keu.</th>
+      <th>Permasalahan</th><th>RTL</th><th>Update</th>${canEdit?'<th>Aksi</th>':''}
+    </tr></thead><tbody>`;
+    items.forEach(k=>{
+      const fgap=parseFloat(k.freal||0)-parseFloat(k.fts||0);
+      const kpct=k.anggaran?Math.round(Number(k.kreal)/Number(k.anggaran)*100):0;
+      const kspct=k.anggaran?Math.round(Number(k.kts)/Number(k.anggaran)*100):0;
+      const kgap=kpct-kspct;
+      const fc=fgap<-20?'c-red':fgap<0?'c-orange':'c-green';
+      const kc=kgap<-20?'c-red':kgap<0?'c-orange':'c-green';
+      h+=`<tr>
+        <td class="fw6">${k.nama}</td>
+        <td class="mono">${formatRp(k.anggaran)}</td>
+        <td class="mono">${k.fts||0}%</td>
+        <td class="mono ${fc}">${k.freal||0}% ${fgap<0?`▼${Math.abs(Math.round(fgap))}%`:fgap>0?`▲${Math.round(fgap)}%`:''}</td>
+        <td class="mono">${formatRp(k.kts)}</td>
+        <td class="mono ${kc}">${formatRp(k.kreal)} (${kpct}%)</td>
+        <td style="font-size:12px;max-width:160px">${k.masalah||'—'}</td>
+        <td style="font-size:12px;max-width:160px">${k.rtl||'—'}</td>
+        <td class="mono" style="font-size:11px">${k.updated||'—'}</td>
+        ${canEdit?`<td>
+          <div class="flex gap-8">
+            <button class="btn btn-teal btn-xs" onclick="_editReal('${k.id}')">✏</button>
+            <button class="btn btn-red btn-xs" onclick="_delReal('${k.id}')">🗑</button>
+          </div></td>`:''}
+      </tr>`;
+    });
+    h+=`</tbody></table></div>`;
+    const totA=items.reduce((a,k)=>a+Number(k.anggaran||0),0);
+    const totK=items.reduce((a,k)=>a+Number(k.kreal||0),0);
+    const avgF=items.length?Math.round(items.reduce((a,k)=>a+Number(k.freal||0),0)/items.length):0;
+    h+=`<div class="g4 mt-16" style="margin-top:16px">
+      <div class="stat-card"><div class="stat-num">${avgF}%</div><div class="stat-lbl">Rata-rata Fisik</div></div>
+      <div class="stat-card"><div class="stat-num">${totA?Math.round(totK/totA*100):0}%</div><div class="stat-lbl">Realisasi Keuangan</div></div>
+      <div class="stat-card"><div class="stat-num">${formatRp(totA)}</div><div class="stat-lbl">Total Anggaran</div></div>
+      <div class="stat-card"><div class="stat-num">${formatRp(totK)}</div><div class="stat-lbl">Total Realisasi</div></div>
+    </div>`;
+  }
+  h+=`</div>`;
+  el.innerHTML=h;
+}
+
+window._addReal=async function(unit){
+  const nama=document.getElementById('rl-nama')?.value?.trim();
+  if(!nama){toast('⚠️ Nama kegiatan wajib diisi!');return;}
+  await addDoc(collection(db,'realisasi'),{
+    nama, unit,
+    anggaran:Number(document.getElementById('rl-anggaran')?.value||0),
+    fts:Number(document.getElementById('rl-fts')?.value||0),
+    freal:Number(document.getElementById('rl-freal')?.value||0),
+    kts:Number(document.getElementById('rl-kts')?.value||0),
+    kreal:Number(document.getElementById('rl-kreal')?.value||0),
+    masalah:document.getElementById('rl-masalah')?.value||'',
+    rtl:document.getElementById('rl-rtl')?.value||'',
+    updated:formatDate(today), createdBy:CU.id
+  });
+  toast('✅ Kegiatan ditambahkan!'); renderRealisasi();
+};
+window._delReal=async function(id){
+  if(!confirm('Hapus kegiatan ini?')) return;
+  await deleteDoc(doc(db,'realisasi',id));
+  toast('🗑 Kegiatan dihapus'); renderRealisasi();
+};
+window._editReal=async function(id){
+  const snap=await getDoc(doc(db,'realisasi',id));
+  if(!snap.exists()) return;
+  const k={id:snap.id,...snap.data()};
+  showModal(`<div class="modal-title">✏️ Edit Kegiatan</div>
+    <div class="g2">
+      <div class="fr"><label class="fl">Nama Kegiatan</label><input class="fi" id="er-nama" value="${k.nama||''}"></div>
+      <div class="fr"><label class="fl">Anggaran (Rp)</label><input type="number" class="fi" id="er-anggaran" value="${k.anggaran||0}"></div>
+      <div class="fr"><label class="fl">Real.Fisik TS (%)</label><input type="number" class="fi" id="er-fts" value="${k.fts||0}"></div>
+      <div class="fr"><label class="fl">Real.Fisik Capaian (%)</label><input type="number" class="fi" id="er-freal" value="${k.freal||0}"></div>
+      <div class="fr"><label class="fl">Keu.Kas (Rp)</label><input type="number" class="fi" id="er-kts" value="${k.kts||0}"></div>
+      <div class="fr"><label class="fl">Keu.Capaian (Rp)</label><input type="number" class="fi" id="er-kreal" value="${k.kreal||0}"></div>
+      <div class="fr"><label class="fl">Permasalahan</label><textarea class="ft" id="er-masalah">${k.masalah||''}</textarea></div>
+      <div class="fr"><label class="fl">RTL</label><textarea class="ft" id="er-rtl">${k.rtl||''}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_saveEditReal('${id}')">💾 Simpan</button>
+    </div>`);
+};
+window._saveEditReal=async function(id){
+  await updateDoc(doc(db,'realisasi',id),{
+    nama:document.getElementById('er-nama')?.value||'',
+    anggaran:Number(document.getElementById('er-anggaran')?.value||0),
+    fts:Number(document.getElementById('er-fts')?.value||0),
+    freal:Number(document.getElementById('er-freal')?.value||0),
+    kts:Number(document.getElementById('er-kts')?.value||0),
+    kreal:Number(document.getElementById('er-kreal')?.value||0),
+    masalah:document.getElementById('er-masalah')?.value||'',
+    rtl:document.getElementById('er-rtl')?.value||'',
+    updated:formatDate(today), updatedBy:CU.id
+  });
+  _closeModal(); toast('✅ Data berhasil diperbarui!'); renderRealisasi();
+};
+
+// ══════════════════════════════════════
+// INDIKATOR — FULL CRUD
+// ══════════════════════════════════════
+async function renderIndikator() {
+  const el=document.getElementById('page-indikator');
+  el.innerHTML=`<div class="page-title">Indikator Kinerja</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  const unit=CU.unit;
+  const unitName=UNITS[unit]||unit;
+  const canEdit=CU.role==='kasubag'||CU.role==='admin';
+  const canManage=CU.role==='admin'; // tambah/hapus
+
+  const snap=await getDocs(query(collection(db,'indikators'),where('unit','==',unit)));
+  const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.active!==false);
+
+  let h=`<div class="page-title">Indikator Kinerja</div>
+  <div class="page-sub">${unitName} — Input oleh Sub Bagian/Sub Koordinator | Tahun ${new Date().getFullYear()}</div>`;
+
+  // Add button — admin & kasubag
+  if(canEdit){
+    h+=`<div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-gold" onclick="_showAddIndikator('${unit}')">➕ Tambah Indikator Baru</button>
+    </div>`;
+  }
+
+  if(!items.length){
+    h+=`<div class="card"><div class="empty-state"><div class="empty-icon">🎯</div><div>Belum ada indikator.</div></div></div>`;
+    el.innerHTML=h; return;
+  }
+
+  items.forEach((item,idx)=>{
+    const real=parseFloat(item.realisasi)||0;
+    const tgt=parseFloat(item.targetBulan)||0;
+    const gap=tgt>0?real-tgt:null;
+    const pct=tgt>0?Math.min(Math.round(real/tgt*100),150):null;
+    let cls='';
+    if(gap!==null) cls=gap<-20?'danger':gap<0?'warn':'ok';
+
+    h+=`<div class="ind-item ${cls}">
+      <div class="flex-b mb-8" style="margin-bottom:10px">
+        <div>
+          <div class="fw6" style="font-size:14px">${item.nama}</div>
+          <div class="text-xs text-muted mt-8" style="margin-top:4px">Satuan: ${item.satuan||'—'}</div>
+        </div>
+        <div class="flex gap-8">
+          ${cls==='danger'?`<span class="badge badge-red">⚠️ Jauh di Bawah</span>`:cls==='warn'?`<span class="badge badge-orange">⚡ Di Bawah Target</span>`:gap!==null?`<span class="badge badge-green">✅ On Track</span>`:''}
+          ${canEdit?`<button class="btn btn-blue btn-xs" onclick="_editIndikator('${item.id}')">✏️ Edit</button>`:''}
+          ${canManage?`<button class="btn btn-red btn-xs" onclick="_delIndikator('${item.id}')">🗑</button>`:''}
+        </div>
+      </div>
+      <div class="g3" style="gap:10px;margin-bottom:10px">
+        <div><div class="text-xs text-muted">Target Tahunan</div><div class="fw6 text-gold">${item.targetTahunan||'—'} ${item.satuan||''}</div></div>
+        <div><div class="text-xs text-muted">Target Kumulatif Bln Ini</div><div class="fw6">${item.targetBulan||'—'} ${item.satuan||''}</div></div>
+        <div><div class="text-xs text-muted">Realisasi Bln Ini</div><div class="fw6 ${gap===null?'':gap<0?'text-red':'text-green'}">${item.realisasi||'—'} ${item.satuan||''}</div></div>
+      </div>`;
+
+    if(pct!==null){
+      const col=pct<70?'var(--red)':pct<90?'var(--orange)':'var(--green)';
+      h+=`<div class="prog-row"><div class="prog-wrap"><div class="prog-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>
+        <span class="prog-pct" style="color:${col}">${pct}%</span></div>`;
+    }
+
+    if(gap!==null&&gap<0){
+      h+=`<div class="fr mt-8" style="margin-top:8px"><label class="fl text-red" style="color:#fc8181">📌 Rencana Tindak Lanjut</label>
+        <div style="background:rgba(229,62,62,0.06);border-radius:6px;padding:10px;font-size:13px">${item.rtl||'<span style="color:var(--text3)">Belum ada RTL</span>'}</div>
+      </div>`;
+    }
+
+    h+=`</div>`;
+  });
+
+  el.innerHTML=h;
+}
+
+window._showAddIndikator=function(unit){
+  showModal(`<div class="modal-title">➕ Tambah Indikator Baru</div>
+    <div class="fr"><label class="fl">Nama Indikator</label><input class="fi" id="ai-nama" placeholder="Nama indikator kinerja..."></div>
+    <div class="g2">
+      <div class="fr"><label class="fl">Satuan (%, nilai, dll)</label><input class="fi" id="ai-satuan" placeholder="%" value="%"></div>
+      <div class="fr"><label class="fl">Target Tahunan</label><input type="number" class="fi" id="ai-tty" placeholder="0"></div>
+      <div class="fr"><label class="fl">Target Kumulatif Bulan Ini</label><input type="number" class="fi" id="ai-tb" placeholder="0"></div>
+      <div class="fr"><label class="fl">Realisasi Bulan Ini</label><input type="number" class="fi" id="ai-real" placeholder="0"></div>
+    </div>
+    <div class="fr"><label class="fl">RTL (jika ada)</label><textarea class="ft" id="ai-rtl" placeholder="Rencana tindak lanjut..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_saveNewIndikator('${unit}')">➕ Tambah</button>
+    </div>`);
+};
+window._saveNewIndikator=async function(unit){
+  const nama=document.getElementById('ai-nama')?.value?.trim();
+  if(!nama){toast('⚠️ Nama indikator wajib diisi!');return;}
+  await addDoc(collection(db,'indikators'),{
+    nama, unit,
+    satuan:document.getElementById('ai-satuan')?.value||'%',
+    targetTahunan:document.getElementById('ai-tty')?.value||'',
+    targetBulan:document.getElementById('ai-tb')?.value||'',
+    realisasi:document.getElementById('ai-real')?.value||'',
+    rtl:document.getElementById('ai-rtl')?.value||'',
+    active:true, createdAt:new Date().toISOString(), createdBy:CU.id
+  });
+  _closeModal(); toast('✅ Indikator berhasil ditambahkan!'); renderIndikator();
+};
+window._editIndikator=async function(id){
+  const snap=await getDoc(doc(db,'indikators',id));
+  if(!snap.exists()) return;
+  const item={id:snap.id,...snap.data()};
+  showModal(`<div class="modal-title">✏️ Edit Indikator Kinerja</div>
+    <div class="fr"><label class="fl">Nama Indikator</label><input class="fi" id="ei-nama" value="${item.nama||''}"></div>
+    <div class="g2">
+      <div class="fr"><label class="fl">Satuan</label><input class="fi" id="ei-satuan" value="${item.satuan||'%'}"></div>
+      <div class="fr"><label class="fl">Target Tahunan</label><input type="number" class="fi" id="ei-tty" value="${item.targetTahunan||''}"></div>
+      <div class="fr"><label class="fl">Target Kumulatif Bulan Ini</label><input type="number" class="fi" id="ei-tb" value="${item.targetBulan||''}"></div>
+      <div class="fr"><label class="fl">Realisasi Bulan Ini</label><input type="number" class="fi" id="ei-real" value="${item.realisasi||''}"></div>
+    </div>
+    <div class="fr"><label class="fl">RTL</label><textarea class="ft" id="ei-rtl">${item.rtl||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_saveEditIndikator('${id}')">💾 Simpan Perubahan</button>
+    </div>`);
+};
+window._saveEditIndikator=async function(id){
+  await updateDoc(doc(db,'indikators',id),{
+    nama:document.getElementById('ei-nama')?.value||'',
+    satuan:document.getElementById('ei-satuan')?.value||'%',
+    targetTahunan:document.getElementById('ei-tty')?.value||'',
+    targetBulan:document.getElementById('ei-tb')?.value||'',
+    realisasi:document.getElementById('ei-real')?.value||'',
+    rtl:document.getElementById('ei-rtl')?.value||'',
+    updatedAt:new Date().toISOString(), updatedBy:CU.id
+  });
+  _closeModal(); toast('✅ Indikator berhasil diperbarui!'); renderIndikator();
+};
+window._delIndikator=async function(id){
+  if(!confirm('Hapus indikator ini? Data akan dihapus permanen.')) return;
+  await deleteDoc(doc(db,'indikators',id));
+  toast('🗑 Indikator dihapus'); renderIndikator();
+};
+
+// ══════════════════════════════════════
+// LOG
+// ══════════════════════════════════════
+async function renderLog() {
+  const el=document.getElementById('page-log');
+  el.innerHTML=`<div class="page-title">Log Kegiatan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  let q;
+  if(CU.role==='admin'||CU.role==='kadis'){
+    q=query(collection(db,'logs'),orderBy('savedAt','desc'));
+  } else {
+    // Show own logs + subordinate logs
+    const subs=ALL_USERS.filter(u=>u.superior===CU.id).map(u=>u.id);
+    const ids=[CU.id,...subs];
+    // Firestore 'in' max 10 — fallback to getAll
+    q=query(collection(db,'logs'),orderBy('savedAt','desc'));
+  }
+  const snap=await getDocs(q);
+  let logs=snap.docs.map(d=>({id:d.id,...d.data()}));
+
+  if(CU.role!=='admin'&&CU.role!=='kadis'){
+    const usSnap=await getDocs(collection(db,'users'));
+    ALL_USERS=usSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const subs=ALL_USERS.filter(u=>u.superior===CU.id).map(u=>u.id);
+    const ids=new Set([CU.id,...subs]);
+    logs=logs.filter(l=>ids.has(l.user));
+  }
+
+  let h=`<div class="page-title">Log Kegiatan</div>
+  <div class="page-sub">Riwayat kegiatan selesai & tervalidasi</div>
+  <div class="card"><div class="card-header"><span class="card-title">📜 Riwayat</span><span class="card-badge">${logs.length} entri</span></div>`;
+  if(!logs.length){
+    h+=`<div class="empty-state"><div class="empty-icon">📜</div><div>Belum ada log kegiatan.</div></div>`;
+  } else {
+    h+=`<div class="scroll-box">`;
+    logs.forEach(l=>{
+      const typeLabel={kabid_work:'Pekerjaan Strategis',kasubag_work:'Pekerjaan Reguler',kasubag_urgent:'Pekerjaan Mendesak',staf_task:'Kegiatan Staf',star5:'⭐ Bintang 5'}[l.type]||l.type;
+      h+=`<div class="log-entry">
+        <div class="log-meta">${formatDate(l.date)} — ${l.userName||l.user} — ${l.userLabel||''}</div>
+        <div class="flex-b">
+          <div class="fw6">${l.desc||l.type==='star5'?`⭐ Mendapat nilai Bintang 5`:l.desc||'—'}</div>
+          <span class="badge badge-gold">${typeLabel}</span>
+        </div>
+        ${l.output?`<div class="text-muted text-sm mt-8" style="margin-top:4px">Output: ${l.output}</div>`:''}
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  el.innerHTML=h;
+}
+
+// ══════════════════════════════════════
+// USER MANAGEMENT (Admin only)
+// ══════════════════════════════════════
+async function renderUsers() {
+  const el=document.getElementById('page-users');
+  if(CU.role!=='admin'&&CU.role!=='kadis'){
+    el.innerHTML=`<div class="card"><p class="text-red">⛔ Akses ditolak. Hanya admin yang dapat mengakses halaman ini.</p></div>`;
+    return;
+  }
+  el.innerHTML=`<div class="page-title">Manajemen User</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  const snap=await getDocs(collection(db,'users'));
+  const users=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));
+
+  const roleOrder={admin:0,kadis:1,kabid:2,kasubag:3,staf:4};
+  users.sort((a,b)=>(roleOrder[a.role]??9)-(roleOrder[b.role]??9)||a.name.localeCompare(b.name));
+
+  let h=`<div class="page-title">Manajemen User</div>
+  <div class="page-sub">Kelola akun pengguna sistem SIKENDA — hanya admin</div>
+  <div style="margin-bottom:16px">
+    <button class="btn btn-gold" onclick="_showAddUser()">➕ Tambah User Baru</button>
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">👥 Daftar Pengguna</span><span class="card-badge">${users.length} user</span></div>
+  <div class="tbl-wrap"><table><thead><tr>
+    <th>Nama</th><th>Jabatan</th><th>Unit</th><th>Role</th><th>Status</th><th>Aksi</th>
+  </tr></thead><tbody>`;
+
+  users.forEach(u=>{
+    const roleBadge={admin:'badge-red',kadis:'badge-gold',kabid:'badge-blue',kasubag:'badge-teal',staf:'badge-green'}[u.role]||'badge-gold';
+    h+=`<tr>
+      <td class="fw6">${u.name}</td>
+      <td>${u.label||'—'}</td>
+      <td>${UNITS[u.unit]||u.unit||'—'}</td>
+      <td><span class="badge ${roleBadge}">${u.role}</span></td>
+      <td>${u.active!==false?`<span class="badge badge-green">✅ Aktif</span>`:`<span class="badge badge-red">⛔ Nonaktif</span>`}</td>
+      <td>
+        <div class="flex gap-8">
+          <button class="btn btn-blue btn-xs" onclick="_editUser('${u.id}')">✏️ Edit</button>
+          <button class="btn btn-red btn-xs" onclick="_toggleUserActive('${u.id}',${u.active!==false})">${u.active!==false?'🔒 Nonaktif':'🔓 Aktif'}</button>
+          ${CU.role==='admin'?`<button class="btn btn-red btn-xs" onclick="_delUser('${u.id}')">🗑</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  el.innerHTML=h;
+}
+
+window._showAddUser=function(){
+  const unitOpts=Object.entries(UNITS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'<option value="admin">Admin</option><option value="dinkes">Dinkes</option>';
+  const roleOpts=['admin','kadis','kabid','kasubag','staf'].map(r=>`<option value="${r}">${r}</option>`).join('');
+  const supOpts=ALL_USERS.map(u=>`<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+  showModal(`<div class="modal-title">➕ Tambah User Baru</div>
+    <div class="g2">
+      <div class="fr"><label class="fl">Nama Lengkap</label><input class="fi" id="nu-name" placeholder="Nama lengkap beserta gelar..."></div>
+      <div class="fr"><label class="fl">Jabatan / Label</label><input class="fi" id="nu-label" placeholder="Kasubag Keuangan..."></div>
+      <div class="fr"><label class="fl">Unit Kerja</label><select class="fs" id="nu-unit">${unitOpts}</select></div>
+      <div class="fr"><label class="fl">Role</label><select class="fs" id="nu-role">${roleOpts}</select></div>
+      <div class="fr"><label class="fl">Atasan Langsung</label><select class="fs" id="nu-sup"><option value="">— Tidak ada —</option>${supOpts}</select></div>
+      <div class="fr"><label class="fl">Password</label><input class="fi" id="nu-pass" placeholder="Password (min 6 karakter)"></div>
+      <div class="fr"><label class="fl">ID Unik (huruf kecil, tanpa spasi)</label><input class="fi" id="nu-id" placeholder="cth: staf_sdk_5"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_saveNewUser()">➕ Tambah User</button>
+    </div>`);
+};
+window._saveNewUser=async function(){
+  const id=document.getElementById('nu-id')?.value?.trim().toLowerCase().replace(/\s+/g,'_');
+  const name=document.getElementById('nu-name')?.value?.trim();
+  const pass=document.getElementById('nu-pass')?.value?.trim();
+  if(!id||!name||!pass){toast('⚠️ ID, Nama, dan Password wajib diisi!');return;}
+  if(pass.length<6){toast('⚠️ Password minimal 6 karakter!');return;}
+  const existing=await getDoc(doc(db,'users',id));
+  if(existing.exists()){toast('⚠️ ID sudah digunakan!');return;}
+  await setDoc(doc(db,'users',id),{
+    id, name,
+    label:document.getElementById('nu-label')?.value||'',
+    unit:document.getElementById('nu-unit')?.value||'',
+    role:document.getElementById('nu-role')?.value||'staf',
+    superior:document.getElementById('nu-sup')?.value||null,
+    pass, active:true, createdAt:new Date().toISOString(), createdBy:CU.id
+  });
+  _closeModal(); toast('✅ User berhasil ditambahkan!');
+  // Reload users list
+  const snap=await getDocs(collection(db,'users'));
+  ALL_USERS=snap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
+  renderUsers();
+};
+window._editUser=async function(id){
+  const snap=await getDoc(doc(db,'users',id));
+  if(!snap.exists()) return;
+  const u={id:snap.id,...snap.data()};
+  const unitOpts=Object.entries(UNITS).map(([k,v])=>`<option value="${k}" ${u.unit===k?'selected':''}>${v}</option>`).join('')+`<option value="admin" ${u.unit==='admin'?'selected':''}>Admin</option><option value="dinkes" ${u.unit==='dinkes'?'selected':''}>Dinkes</option>`;
+  const roleOpts=['admin','kadis','kabid','kasubag','staf'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('');
+  const usSnap=await getDocs(collection(db,'users'));
+  const allU=usSnap.docs.map(d=>({id:d.id,...d.data()}));
+  const supOpts=allU.filter(x=>x.id!==id).map(x=>`<option value="${x.id}" ${u.superior===x.id?'selected':''}>${x.name} (${x.role})</option>`).join('');
+  showModal(`<div class="modal-title">✏️ Edit User: ${u.name}</div>
+    <div class="g2">
+      <div class="fr"><label class="fl">Nama Lengkap</label><input class="fi" id="eu-name" value="${u.name||''}"></div>
+      <div class="fr"><label class="fl">Jabatan / Label</label><input class="fi" id="eu-label" value="${u.label||''}"></div>
+      <div class="fr"><label class="fl">Unit Kerja</label><select class="fs" id="eu-unit">${unitOpts}</select></div>
+      <div class="fr"><label class="fl">Role</label><select class="fs" id="eu-role">${roleOpts}</select></div>
+      <div class="fr"><label class="fl">Atasan Langsung</label><select class="fs" id="eu-sup"><option value="">— Tidak ada —</option>${supOpts}</select></div>
+      <div class="fr"><label class="fl">Password Baru (kosongkan jika tidak diubah)</label><input class="fi" id="eu-pass" placeholder="Kosongkan jika tidak diubah"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_saveEditUser('${id}')">💾 Simpan</button>
+    </div>`);
+};
+window._saveEditUser=async function(id){
+  const updates={
+    name:document.getElementById('eu-name')?.value||'',
+    label:document.getElementById('eu-label')?.value||'',
+    unit:document.getElementById('eu-unit')?.value||'',
+    role:document.getElementById('eu-role')?.value||'staf',
+    superior:document.getElementById('eu-sup')?.value||null,
+    updatedAt:new Date().toISOString(), updatedBy:CU.id
+  };
+  const pass=document.getElementById('eu-pass')?.value?.trim();
+  if(pass) {
+    if(pass.length<6){toast('⚠️ Password minimal 6 karakter!');return;}
+    updates.pass=pass;
+  }
+  await updateDoc(doc(db,'users',id),updates);
+  _closeModal(); toast('✅ User berhasil diperbarui!'); renderUsers();
+};
+window._toggleUserActive=async function(id,currentActive){
+  if(!confirm(`${currentActive?'Nonaktifkan':'Aktifkan'} user ini?`)) return;
+  await updateDoc(doc(db,'users',id),{active:!currentActive});
+  toast(`✅ User ${currentActive?'dinonaktifkan':'diaktifkan'}!`); renderUsers();
+};
+window._delUser=async function(id){
+  if(id==='admin'){toast('⚠️ Akun admin tidak bisa dihapus!');return;}
+  if(!confirm('Hapus user ini PERMANEN? Semua data harian mereka tetap tersimpan.')) return;
+  await deleteDoc(doc(db,'users',id));
+  toast('🗑 User dihapus'); renderUsers();
+};
+
+</script>
+</body>
+</html>
