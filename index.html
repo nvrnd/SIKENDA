@@ -207,7 +207,7 @@ td.c-red{color:#fc8181} td.c-orange{color:#f6ad55} td.c-green{color:#68d391}
 
 <!-- ══ FIREBASE CONFIG — GANTI DI SINI ══ -->
 <script>
-const FIREBASE_CONFIG = {
+window.FIREBASE_CONFIG = {
 apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
   authDomain: "sikenda-8e254.firebaseapp.com",
   projectId: "sikenda-8e254",
@@ -243,6 +243,7 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
         <div class="topbar-time"><span class="live-dot"></span><span id="clock">—</span></div>
         <div class="topbar-date" id="tb-date">—</div>
       </div>
+      <button class="topbar-btn" id="tb-avatar" onclick="showPage('profil')" style="background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--navy);font-weight:700;border-radius:50%;width:38px;height:38px;padding:0;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Profil Saya"></button>
       <button class="topbar-btn logout-btn" onclick="doLogout()">Keluar</button>
     </div>
   </div>
@@ -257,6 +258,8 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
     <div class="nav-section" style="margin-top:8px">VALIDASI</div>
     <div class="nav-item" onclick="showPage('validasi')" id="nav-validasi"><span class="nav-icon">✅</span>Validasi Atasan</div>
     <div class="nav-item" onclick="showPage('users')" id="nav-users" style="display:none"><span class="nav-icon">👥</span>Manajemen User</div>
+    <div class="nav-section" style="margin-top:8px">AKUN</div>
+    <div class="nav-item" onclick="showPage('profil')" id="nav-profil"><span class="nav-icon">👤</span>Profil Saya</div>
   </div>
 
   <div class="main-content">
@@ -267,6 +270,7 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
     <div class="page" id="page-log"></div>
     <div class="page" id="page-validasi"></div>
     <div class="page" id="page-users"></div>
+    <div class="page" id="page-profil"></div>
   </div>
 </div>
 
@@ -275,15 +279,15 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
   <div class="modal-box" id="modal-box"></div>
 </div>
 
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
-  updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+<script>
+(async () => {
+const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
+const { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  updateDoc, deleteDoc, query, where, orderBy, serverTimestamp
+} = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
 
 // ── INIT FIREBASE ──
-const app = initializeApp(FIREBASE_CONFIG);
+const app = initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
 
 // ── STATE ──
@@ -425,10 +429,11 @@ async function loadUsersForLogin() {
         <option value="">— Memuat daftar pengguna... —</option>
       </select>
       <input type="password" class="form-input" id="login-pass" placeholder="Password" style="margin-bottom:16px">
-      <button class="login-btn" id="login-btn" onclick="doLogin()">MASUK</button>
+      <button class="login-btn" id="login-btn">MASUK</button>
       <div class="login-err" id="login-err"></div>
       <div class="login-loading" id="login-loading" style="display:none"><span class="loading-spinner"></span> Memuat...</div>
     </div>`;
+  document.getElementById('login-btn').addEventListener('click', doLogin);
   document.getElementById('login-pass').addEventListener('keyup', e => { if(e.key==='Enter') doLogin(); });
 
   try {
@@ -497,6 +502,9 @@ tryRestoreSession();
 // ── INIT APP ──
 function initApp() {
   document.getElementById('tb-user').textContent=`${CU.name} — ${CU.label}`;
+  // Set avatar initials in topbar
+  const avatarEl = document.getElementById('tb-avatar');
+  if(avatarEl) avatarEl.textContent = initials(CU.name);
   startClock();
   if(CU.role==='admin'||CU.role==='kadis') document.getElementById('nav-users').style.display='flex';
   showPage('executive');
@@ -512,7 +520,7 @@ window.showPage = function(id) {
   renderPage(id);
 };
 function renderPage(id) {
-  const map={executive:renderExecutive,daily:renderDaily,realisasi:renderRealisasi,indikator:renderIndikator,log:renderLog,validasi:renderValidasi,users:renderUsers};
+  const map={executive:renderExecutive,daily:renderDaily,realisasi:renderRealisasi,indikator:renderIndikator,log:renderLog,validasi:renderValidasi,users:renderUsers,profil:renderProfil};
   if(map[id]) map[id]();
 }
 
@@ -689,7 +697,10 @@ function renderKabidFormHtml(data) {
     const lk=locked||w.validatedKadis;
     const pct=parseInt(w.progress||0);
     h+=`<div class="work-box ${lk?'locked':''}">
-      <div class="work-box-num">📌 Pekerjaan ${i+1}</div>
+      <div class="flex-b mb-8" style="margin-bottom:8px">
+        <div class="work-box-num" style="margin-bottom:0">📌 Pekerjaan ${i+1}</div>
+        ${!lk&&w.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKabidWork(${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
+      </div>
       <div class="fr"><label class="fl">Pekerjaan Strategis</label><textarea class="ft" id="wk-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan strategis...">${w.desc||''}</textarea></div>
       <div class="fr"><label class="fl">Output</label><input class="fi" id="wk-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${w.output||''}"></div>
       <div class="fr"><label class="fl">Target Waktu</label><input type="date" class="fi" id="wk-tgt-${i}" ${lk?'disabled':''} value="${w.target||''}"></div>
@@ -719,7 +730,10 @@ function renderKasubagFormHtml(data) {
     const lk=locked||w.validated;
     const pct=parseInt(w.progress||0);
     h+=`<div class="work-box ${lk?'locked':''}">
-      <div class="work-box-num">📌 Reguler ${i+1}</div>
+      <div class="flex-b mb-8" style="margin-bottom:8px">
+        <div class="work-box-num" style="margin-bottom:0">📌 Reguler ${i+1}</div>
+        ${!lk&&w.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKasubagWork('reg',${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
+      </div>
       <div class="fr"><label class="fl">Pekerjaan</label><textarea class="ft" id="ws-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan...">${w.desc||''}</textarea></div>
       <div class="fr"><label class="fl">Output</label><input class="fi" id="ws-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${w.output||''}"></div>
       <div class="fr"><label class="fl">Target</label><input type="date" class="fi" id="ws-tgt-${i}" ${lk?'disabled':''} value="${w.target||''}"></div>
@@ -742,7 +756,10 @@ function renderKasubagFormHtml(data) {
     const lk=locked||u.validated;
     const pct=parseInt(u.progress||0);
     h+=`<div class="work-box ${lk?'locked':''}" style="border-color:rgba(229,62,62,0.3)">
-      <div class="work-box-num" style="color:var(--red)">🚨 Mendesak ${i+1}</div>
+      <div class="flex-b mb-8" style="margin-bottom:8px">
+        <div class="work-box-num" style="margin-bottom:0;color:var(--red)">🚨 Mendesak ${i+1}</div>
+        ${!lk&&u.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKasubagWork('urg',${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
+      </div>
       <div class="fr"><label class="fl">Pekerjaan Mendesak</label><textarea class="ft" id="wu-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan mendesak...">${u.desc||''}</textarea></div>
       <div class="fr"><label class="fl">Output</label><input class="fi" id="wu-out-${i}" ${lk?'disabled':''} placeholder="Output..." value="${u.output||''}"></div>
       <div class="fr"><label class="fl">Target</label><input type="date" class="fi" id="wu-tgt-${i}" ${lk?'disabled':''} value="${u.target||''}"></div>
@@ -770,7 +787,10 @@ function renderStafFormHtml(data) {
   tasks.forEach((t,i)=>{
     const lk=locked||data.validated;
     h+=`<div class="work-box mb-12" style="margin-bottom:12px" id="stask-${i}">
-      <div class="work-box-num">📌 Kegiatan ${i+1}</div>
+      <div class="flex-b mb-8" style="margin-bottom:8px">
+        <div class="work-box-num" style="margin-bottom:0">📌 Kegiatan ${i+1}</div>
+        ${!lk?`<button class="btn btn-red btn-xs" onclick="_hapusStafTask(${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
+      </div>
       <div class="fr"><label class="fl">Rencana Kegiatan</label><textarea class="ft" id="st-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan kegiatan hari ini...">${t.desc||''}</textarea></div>
       <div class="fr"><label class="fl">Output Kegiatan</label><input class="fi" id="st-out-${i}" ${lk?'disabled':''} placeholder="Output yang dihasilkan..." value="${t.output||''}"></div>
       <div class="flex-b fr">
@@ -825,6 +845,58 @@ function attachDailyEvents(data) {
   const bS=document.getElementById('btn-save-staf');
   if(bS) bS.onclick=()=>saveStafTasks(data);
 }
+
+// ── HAPUS KEGIATAN HARIAN ──
+
+window._hapusKabidWork = async function(i) {
+  if(!confirm(`Hapus Pekerjaan ${i+1}? Kegiatan ini akan dianggap batal dan tidak bisa dikembalikan.`)) return;
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  const works=data.works||[{},{},{}];
+  // Clear the slot (reset to empty object)
+  works[i]={};
+  await setDoc(doc(db,'daily',key),{...data,works,updatedAt:new Date().toISOString()},{merge:false});
+  toast('🗑 Pekerjaan berhasil dihapus');
+  renderDaily();
+};
+
+window._hapusKasubagWork = async function(type, i) {
+  const label = type==='urg' ? `Pekerjaan Mendesak ${i+1}` : `Pekerjaan Reguler ${i+1}`;
+  if(!confirm(`Hapus ${label}? Kegiatan ini akan dianggap batal.`)) return;
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  const arr = type==='urg' ? 'urgent' : 'works';
+  if(!data[arr]) data[arr]=[{},{},{}];
+  data[arr][i]={};
+  await setDoc(doc(db,'daily',key),{...data,updatedAt:new Date().toISOString()},{merge:false});
+  toast('🗑 Pekerjaan berhasil dihapus');
+  renderDaily();
+};
+
+window._hapusStafTask = async function(i) {
+  if(!confirm(`Hapus Kegiatan ${i+1}? Kegiatan yang dibatalkan tidak akan tersimpan di log.`)) return;
+  const key=`daily_${CU.id}_${today}`;
+  const snap=await getDoc(doc(db,'daily',key));
+  const data=snap.exists()?snap.data():{};
+  const tasks=data.tasks||[];
+  // Simpan nilai terkini input sebelum hapus
+  tasks.forEach((t,idx)=>{
+    if(idx!==i){
+      t.desc=document.getElementById(`st-desc-${idx}`)?.value||t.desc||'';
+      t.output=document.getElementById(`st-out-${idx}`)?.value||t.output||'';
+    }
+  });
+  // Hapus item index i
+  tasks.splice(i,1);
+  // Jika semua habis, sediakan minimal 1 slot kosong
+  if(tasks.length===0) tasks.push({});
+  data.tasks=tasks;
+  await setDoc(doc(db,'daily',key),{...data,updatedAt:new Date().toISOString()},{merge:false});
+  toast('🗑 Kegiatan berhasil dihapus');
+  renderDaily();
+};
 
 async function saveKabidWorks(existing) {
   const key=`daily_${CU.id}_${today}`;
@@ -915,6 +987,137 @@ async function saveStafTasks(existing) {
 async function addLog(entry) {
   await addDoc(collection(db,'logs'),{...entry,savedAt:new Date().toISOString()});
 }
+
+// ══════════════════════════════════════
+// HAPUS KEGIATAN — dengan modal konfirmasi alasan
+// ══════════════════════════════════════
+
+// Helper: tampilkan modal konfirmasi pembatalan
+function showHapusModal(namaKegiatan, onConfirm) {
+  showModal(`
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:40px;margin-bottom:12px">🗑️</div>
+      <div class="modal-title" style="margin-bottom:6px">Hapus Kegiatan</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">
+        Anda akan menghapus kegiatan:<br>
+        <strong style="color:var(--gold2)">"${namaKegiatan || 'Kegiatan ini'}"</strong>
+      </div>
+    </div>
+    <div class="fr">
+      <label class="fl">Alasan Pembatalan / Penghapusan <span style="color:var(--red)">*</span></label>
+      <textarea class="ft" id="hapus-alasan" placeholder="Contoh: Kegiatan dibatalkan karena narasumber berhalangan hadir..." style="min-height:80px"></textarea>
+    </div>
+    <div style="background:rgba(229,62,62,0.08);border:1px solid rgba(229,62,62,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);margin-bottom:4px">
+      ⚠️ Kegiatan yang dihapus akan tercatat di log sebagai <strong>kegiatan dibatalkan</strong> beserta alasannya.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-teal btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-red btn-sm" onclick="_konfirmasiHapus()">🗑️ Ya, Hapus Kegiatan</button>
+    </div>
+  `);
+  // Simpan callback ke window sementara
+  window._hapusCallback = onConfirm;
+}
+
+window._konfirmasiHapus = async function() {
+  const alasan = document.getElementById('hapus-alasan')?.value?.trim();
+  if(!alasan) {
+    document.getElementById('hapus-alasan').style.borderColor = 'var(--red)';
+    document.getElementById('hapus-alasan').placeholder = '⚠️ Alasan wajib diisi sebelum menghapus!';
+    document.getElementById('hapus-alasan').focus();
+    return;
+  }
+  _closeModal();
+  if(window._hapusCallback) await window._hapusCallback(alasan);
+  window._hapusCallback = null;
+};
+
+// ── Hapus pekerjaan Kabid/Sekretaris ──
+window._hapusKabidWork = function(idx) {
+  const key = `daily_${CU.id}_${today}`;
+  // Baca deskripsi dari DOM dulu sebelum modal
+  const desc = document.getElementById(`wk-desc-${idx}`)?.value || `Pekerjaan ${idx+1}`;
+  showHapusModal(desc, async (alasan) => {
+    const snap = await getDoc(doc(db,'daily',key));
+    const data = snap.exists() ? snap.data() : {};
+    const works = data.works || [];
+    const hapusItem = works[idx] || {};
+    // Catat ke log sebagai dibatalkan
+    if(hapusItem.desc || desc) {
+      await addLog({
+        type: 'dibatalkan',
+        user: CU.id, userName: CU.name, userLabel: CU.label, unit: CU.unit,
+        date: today,
+        desc: hapusItem.desc || desc,
+        alasan,
+        jenisKegiatan: 'Pekerjaan Strategis'
+      });
+    }
+    // Kosongkan slot (bukan splice agar index stabil)
+    works[idx] = {};
+    await setDoc(doc(db,'daily',key), {...data, works, updatedAt: new Date().toISOString()}, {merge:false});
+    toast('🗑️ Kegiatan dihapus & dicatat di log.');
+    renderDaily();
+  });
+};
+
+// ── Hapus pekerjaan Kasubag (reguler atau urgent) ──
+window._hapusKasubagWork = function(type, idx) {
+  const key = `daily_${CU.id}_${today}`;
+  const prefixId = type === 'reg' ? `ws-desc-${idx}` : `wu-desc-${idx}`;
+  const desc = document.getElementById(prefixId)?.value || `Pekerjaan ${idx+1}`;
+  const jenisLabel = type === 'reg' ? 'Pekerjaan Reguler' : 'Pekerjaan Mendesak';
+  showHapusModal(desc, async (alasan) => {
+    const snap = await getDoc(doc(db,'daily',key));
+    const data = snap.exists() ? snap.data() : {};
+    const arrKey = type === 'urg' ? 'urgent' : 'works';
+    const arr = data[arrKey] || [];
+    const hapusItem = arr[idx] || {};
+    if(hapusItem.desc || desc) {
+      await addLog({
+        type: 'dibatalkan',
+        user: CU.id, userName: CU.name, userLabel: CU.label, unit: CU.unit,
+        date: today,
+        desc: hapusItem.desc || desc,
+        alasan,
+        jenisKegiatan: jenisLabel
+      });
+    }
+    arr[idx] = {};
+    data[arrKey] = arr;
+    await setDoc(doc(db,'daily',key), {...data, updatedAt: new Date().toISOString()}, {merge:false});
+    toast('🗑️ Kegiatan dihapus & dicatat di log.');
+    renderDaily();
+  });
+};
+
+// ── Hapus kegiatan Staf ──
+window._hapusStafTask = function(idx) {
+  const key = `daily_${CU.id}_${today}`;
+  const desc = document.getElementById(`st-desc-${idx}`)?.value?.trim() || `Kegiatan ${idx+1}`;
+  showHapusModal(desc, async (alasan) => {
+    const snap = await getDoc(doc(db,'daily',key));
+    const data = snap.exists() ? snap.data() : {};
+    const tasks = data.tasks || [];
+    const hapusItem = tasks[idx] || {};
+    if(hapusItem.desc || desc) {
+      await addLog({
+        type: 'dibatalkan',
+        user: CU.id, userName: CU.name, userLabel: CU.label, unit: CU.unit,
+        date: today,
+        desc: hapusItem.desc || desc,
+        alasan,
+        jenisKegiatan: 'Kegiatan Staf'
+      });
+    }
+    // Hapus dari array (splice agar slot tidak kosong untuk staf)
+    tasks.splice(idx, 1);
+    data.tasks = tasks;
+    await setDoc(doc(db,'daily',key), {...data, updatedAt: new Date().toISOString()}, {merge:false});
+    toast('🗑️ Kegiatan dihapus & dicatat di log.');
+    renderDaily();
+  });
+};
 
 // ══════════════════════════════════════
 // VALIDASI
@@ -1344,56 +1547,328 @@ window._delIndikator=async function(id){
 };
 
 // ══════════════════════════════════════
-// LOG
+// LOG — dengan filter tanggal & tab
 // ══════════════════════════════════════
 async function renderLog() {
-  const el=document.getElementById('page-log');
-  el.innerHTML=`<div class="page-title">Log Kegiatan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+  const el = document.getElementById('page-log');
+  el.innerHTML = `<div class="page-title">Log Kegiatan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
 
-  let q;
-  if(CU.role==='admin'||CU.role==='kadis'){
-    q=query(collection(db,'logs'),orderBy('savedAt','desc'));
-  } else {
-    // Show own logs + subordinate logs
-    const subs=ALL_USERS.filter(u=>u.superior===CU.id).map(u=>u.id);
-    const ids=[CU.id,...subs];
-    // Firestore 'in' max 10 — fallback to getAll
-    q=query(collection(db,'logs'),orderBy('savedAt','desc'));
-  }
-  const snap=await getDocs(q);
-  let logs=snap.docs.map(d=>({id:d.id,...d.data()}));
+  // Ambil semua log dari Firestore
+  const snap = await getDocs(query(collection(db,'logs'), orderBy('savedAt','desc')));
+  let allLogs = snap.docs.map(d => ({id:d.id, ...d.data()}));
 
-  if(CU.role!=='admin'&&CU.role!=='kadis'){
-    const usSnap=await getDocs(collection(db,'users'));
-    ALL_USERS=usSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const subs=ALL_USERS.filter(u=>u.superior===CU.id).map(u=>u.id);
-    const ids=new Set([CU.id,...subs]);
-    logs=logs.filter(l=>ids.has(l.user));
+  // Filter sesuai role — non-admin/kadis hanya lihat milik sendiri + bawahan
+  if(CU.role !== 'admin' && CU.role !== 'kadis') {
+    if(!ALL_USERS.length) {
+      const usSnap = await getDocs(collection(db,'users'));
+      ALL_USERS = usSnap.docs.map(d => ({id:d.id,...d.data()}));
+    }
+    const subs = ALL_USERS.filter(u => u.superior === CU.id).map(u => u.id);
+    const allowed = new Set([CU.id, ...subs]);
+    allLogs = allLogs.filter(l => allowed.has(l.user));
   }
 
-  let h=`<div class="page-title">Log Kegiatan</div>
-  <div class="page-sub">Riwayat kegiatan selesai & tervalidasi</div>
-  <div class="card"><div class="card-header"><span class="card-title">📜 Riwayat</span><span class="card-badge">${logs.length} entri</span></div>`;
-  if(!logs.length){
-    h+=`<div class="empty-state"><div class="empty-icon">📜</div><div>Belum ada log kegiatan.</div></div>`;
-  } else {
-    h+=`<div class="scroll-box">`;
-    logs.forEach(l=>{
-      const typeLabel={kabid_work:'Pekerjaan Strategis',kasubag_work:'Pekerjaan Reguler',kasubag_urgent:'Pekerjaan Mendesak',staf_task:'Kegiatan Staf',star5:'⭐ Bintang 5'}[l.type]||l.type;
-      h+=`<div class="log-entry">
-        <div class="log-meta">${formatDate(l.date)} — ${l.userName||l.user} — ${l.userLabel||''}</div>
-        <div class="flex-b">
-          <div class="fw6">${l.desc||l.type==='star5'?`⭐ Mendapat nilai Bintang 5`:l.desc||'—'}</div>
-          <span class="badge badge-gold">${typeLabel}</span>
-        </div>
-        ${l.output?`<div class="text-muted text-sm mt-8" style="margin-top:4px">Output: ${l.output}</div>`:''}
-      </div>`;
-    });
-    h+=`</div>`;
-  }
-  h+=`</div>`;
-  el.innerHTML=h;
+  // Simpan raw logs ke window state
+  window._logState = {
+    allLogs,
+    activeTab: 'semua',
+    dateFrom: '',
+    dateTo: '',
+  };
+
+  // Render awal
+  _renderLogPage();
 }
+
+function _renderLogPage() {
+  const el = document.getElementById('page-log');
+  const { allLogs } = window._logState;
+
+  // Dapatkan rentang tanggal yang ada di log untuk min/max date picker
+  const dates = allLogs.map(l => l.date).filter(Boolean).sort();
+  const minDate = dates[0] || '';
+  const maxDate = dates[dates.length-1] || '';
+
+  const totalBatal   = allLogs.filter(l => l.type==='dibatalkan').length;
+  const totalSelesai = allLogs.filter(l => l.type!=='dibatalkan').length;
+
+  el.innerHTML = `
+  <div class="page-title">Log Kegiatan</div>
+  <div class="page-sub">Riwayat kegiatan — gunakan filter untuk mempersempit pencarian</div>
+
+  <!-- Stat cards -->
+  <div class="g3" style="margin-bottom:20px">
+    <div class="stat-card">
+      <div class="stat-num" id="log-stat-total">${allLogs.length}</div>
+      <div class="stat-lbl">Total Entri</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:#68d391" id="log-stat-selesai">${totalSelesai}</div>
+      <div class="stat-lbl">Kegiatan Selesai</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:#fc8181" id="log-stat-batal">${totalBatal}</div>
+      <div class="stat-lbl">Kegiatan Dibatalkan</div>
+    </div>
+  </div>
+
+  <!-- FILTER PANEL -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">🔍 Filter Log</span></div>
+
+    <!-- Filter cepat tanggal -->
+    <div style="margin-bottom:14px">
+      <div class="fl" style="margin-bottom:8px">Filter Cepat</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" id="qf-hari"   style="background:rgba(29,175,168,0.15);color:var(--teal2);border:1px solid rgba(29,175,168,0.3)"  onclick="_quickFilter('hari')">📅 Hari Ini</button>
+        <button class="btn btn-sm" id="qf-kemarin" style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_quickFilter('kemarin')">📅 Kemarin</button>
+        <button class="btn btn-sm" id="qf-minggu"  style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_quickFilter('minggu')">📅 Minggu Ini</button>
+        <button class="btn btn-sm" id="qf-bulan"   style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_quickFilter('bulan')">📅 Bulan Ini</button>
+        <button class="btn btn-sm" id="qf-semua"   style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_quickFilter('semua')">📋 Semua Tanggal</button>
+      </div>
+    </div>
+
+    <!-- Filter manual tanggal -->
+    <div class="g2" style="gap:12px;align-items:flex-end">
+      <div class="fr" style="margin-bottom:0">
+        <label class="fl">Dari Tanggal</label>
+        <input type="date" class="fi" id="log-date-from" value="" min="${minDate}" max="${maxDate}"
+          onchange="_applyDateFilter()">
+      </div>
+      <div class="fr" style="margin-bottom:0">
+        <label class="fl">Sampai Tanggal</label>
+        <input type="date" class="fi" id="log-date-to" value="" min="${minDate}" max="${maxDate}"
+          onchange="_applyDateFilter()">
+      </div>
+    </div>
+
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-teal btn-sm" onclick="_applyDateFilter()">🔍 Terapkan Filter</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_resetDateFilter()">✕ Reset Filter</button>
+      <span class="text-xs text-muted" id="log-filter-info"></span>
+    </div>
+  </div>
+
+  <!-- LOG LIST CARD -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📜 Riwayat Log</span>
+      <span class="card-badge" id="log-count-badge">${allLogs.length} entri</span>
+    </div>
+
+    <!-- Tabs jenis -->
+    <div class="tabs" style="margin-bottom:16px;flex-wrap:wrap">
+      <div class="tab active" id="log-tab-semua"   onclick="_setLogTab('semua')">📋 Semua</div>
+      <div class="tab"        id="log-tab-selesai"  onclick="_setLogTab('selesai')">✅ Selesai</div>
+      <div class="tab"        id="log-tab-batal"    onclick="_setLogTab('batal')">🗑️ Dibatalkan</div>
+    </div>
+
+    <div id="log-list-wrap"></div>
+  </div>`;
+
+  // Render list awal
+  _applyLogFilters();
+}
+
+// ── Bangun HTML satu entry log ──
+function _buildOneLog(l) {
+  const isBatal = l.type === 'dibatalkan';
+  const typeLabel = {
+    kabid_work:'Pekerjaan Strategis', kasubag_work:'Pekerjaan Reguler',
+    kasubag_urgent:'Pekerjaan Mendesak', staf_task:'Kegiatan Staf',
+    star5:'Bintang 5', dibatalkan:'Dibatalkan'
+  }[l.type] || l.type;
+  const borderColor = isBatal ? 'rgba(229,62,62,0.6)' : l.type==='star5' ? 'var(--gold)' : 'var(--teal)';
+  const badgeClass  = isBatal ? 'badge-red' : l.type==='star5' ? 'badge-gold' : 'badge-teal';
+  return `<div class="log-entry" style="border-left-color:${borderColor};${isBatal?'background:rgba(229,62,62,0.04)':''}">
+    <div class="log-meta">${formatDate(l.date)} — ${l.userName||l.user||'—'} — ${l.userLabel||''}</div>
+    <div class="flex-b" style="margin-bottom:${isBatal||l.output?'8px':'0'}">
+      <div class="fw6">${l.type==='star5'?'⭐ Mendapat nilai Bintang 5':l.desc||'—'}</div>
+      <span class="badge ${badgeClass}" style="flex-shrink:0;margin-left:10px">${typeLabel}</span>
+    </div>
+    ${l.output?`<div class="text-muted text-sm" style="margin-bottom:6px">📤 Output: ${l.output}</div>`:''}
+    ${isBatal?`<div style="background:rgba(229,62,62,0.1);border:1px solid rgba(229,62,62,0.25);border-radius:6px;padding:8px 12px;font-size:12px">
+      <span style="color:#fc8181;font-weight:600">Alasan Pembatalan:</span>
+      <span style="color:var(--text2);margin-left:6px">${l.alasan||'—'}</span>
+    </div>`:''}
+    ${l.jenisKegiatan&&isBatal?`<div class="text-xs text-muted" style="margin-top:6px">Jenis: ${l.jenisKegiatan}</div>`:''}
+  </div>`;
+}
+
+// ── Fungsi utama: terapkan semua filter aktif dan render list ──
+function _applyLogFilters() {
+  const state = window._logState;
+  if(!state) return;
+  let list = [...state.allLogs];
+
+  // Filter tanggal
+  const from = state.dateFrom || document.getElementById('log-date-from')?.value || '';
+  const to   = state.dateTo   || document.getElementById('log-date-to')?.value   || '';
+  if(from) list = list.filter(l => (l.date||'') >= from);
+  if(to)   list = list.filter(l => (l.date||'') <= to);
+
+  // Filter tab jenis
+  const tab = state.activeTab || 'semua';
+  if(tab === 'selesai') list = list.filter(l => l.type !== 'dibatalkan');
+  if(tab === 'batal')   list = list.filter(l => l.type === 'dibatalkan');
+
+  // Update stat cards & badge
+  const totalFiltered = list.length;
+  const totalBatal    = list.filter(l=>l.type==='dibatalkan').length;
+  const totalSelesai  = list.filter(l=>l.type!=='dibatalkan').length;
+  const statTot  = document.getElementById('log-stat-total');
+  const statSel  = document.getElementById('log-stat-selesai');
+  const statBat  = document.getElementById('log-stat-batal');
+  const badge    = document.getElementById('log-count-badge');
+  const info     = document.getElementById('log-filter-info');
+  if(statTot) statTot.textContent = totalFiltered;
+  if(statSel) statSel.textContent = totalSelesai;
+  if(statBat) statBat.textContent = totalBatal;
+  if(badge)   badge.textContent   = totalFiltered + ' entri';
+  if(info) {
+    if(from || to) {
+      const fromStr = from ? formatDate(from) : '—';
+      const toStr   = to   ? formatDate(to)   : '—';
+      info.textContent = `Menampilkan: ${fromStr} s/d ${toStr}`;
+      info.style.color = 'var(--teal2)';
+    } else {
+      info.textContent = 'Semua tanggal';
+      info.style.color = 'var(--text3)';
+    }
+  }
+
+  // Render list
+  const wrap = document.getElementById('log-list-wrap');
+  if(!wrap) return;
+  if(!list.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div>Tidak ada entri yang cocok dengan filter.</div></div>`;
+    return;
+  }
+
+  // Group by date untuk tampilan lebih rapi
+  const grouped = {};
+  list.forEach(l => {
+    const d = l.date || '—';
+    if(!grouped[d]) grouped[d] = [];
+    grouped[d].push(l);
+  });
+
+  let html = '<div class="scroll-box">';
+  Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(date => {
+    html += `<div style="padding:8px 0 6px;font-size:11px;color:var(--gold);font-weight:600;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid rgba(200,168,75,0.15);margin-bottom:10px">
+      📅 ${formatDate(date)} <span style="color:var(--text3);font-weight:400;margin-left:8px">${grouped[date].length} entri</span>
+    </div>`;
+    grouped[date].forEach(l => { html += _buildOneLog(l); });
+    html += '<div style="height:8px"></div>';
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+// ── Tab jenis ──
+window._setLogTab = function(tab) {
+  window._logState.activeTab = tab;
+  window._logState.dateFrom = document.getElementById('log-date-from')?.value || '';
+  window._logState.dateTo   = document.getElementById('log-date-to')?.value   || '';
+  document.querySelectorAll('[id^="log-tab-"]').forEach(t => t.classList.remove('active'));
+  const tabEl = document.getElementById('log-tab-'+tab);
+  if(tabEl) tabEl.classList.add('active');
+  _applyLogFilters();
+};
+
+// ── Terapkan filter tanggal manual ──
+window._applyDateFilter = function() {
+  const from = document.getElementById('log-date-from')?.value || '';
+  const to   = document.getElementById('log-date-to')?.value   || '';
+  // Validasi: from tidak boleh > to
+  if(from && to && from > to) {
+    document.getElementById('log-date-from').style.borderColor = 'var(--red)';
+    document.getElementById('log-date-to').style.borderColor   = 'var(--red)';
+    const info = document.getElementById('log-filter-info');
+    if(info) { info.textContent = '⚠️ Tanggal awal tidak boleh lebih besar dari tanggal akhir'; info.style.color='var(--red)'; }
+    return;
+  }
+  document.getElementById('log-date-from').style.borderColor = '';
+  document.getElementById('log-date-to').style.borderColor   = '';
+  window._logState.dateFrom = from;
+  window._logState.dateTo   = to;
+  // Reset quick filter highlight
+  ['hari','kemarin','minggu','bulan','semua'].forEach(k=>{
+    const b = document.getElementById('qf-'+k);
+    if(b) { b.style.background='rgba(255,255,255,0.06)'; b.style.color='var(--text2)'; }
+  });
+  _applyLogFilters();
+};
+
+// ── Reset filter tanggal ──
+window._resetDateFilter = function() {
+  window._logState.dateFrom = '';
+  window._logState.dateTo   = '';
+  const fEl = document.getElementById('log-date-from');
+  const tEl = document.getElementById('log-date-to');
+  if(fEl) { fEl.value=''; fEl.style.borderColor=''; }
+  if(tEl) { tEl.value=''; tEl.style.borderColor=''; }
+  ['hari','kemarin','minggu','bulan','semua'].forEach(k=>{
+    const b = document.getElementById('qf-'+k);
+    if(b) { b.style.background='rgba(255,255,255,0.06)'; b.style.color='var(--text2)'; }
+  });
+  const qfAll = document.getElementById('qf-semua');
+  if(qfAll) { qfAll.style.background='rgba(29,175,168,0.15)'; qfAll.style.color='var(--teal2)'; }
+  _applyLogFilters();
+};
+
+// ── Filter cepat ──
+window._quickFilter = function(key) {
+  const now = new Date();
+  let from = '', to = '';
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  if(key === 'hari') {
+    from = to = fmt(now);
+  } else if(key === 'kemarin') {
+    const y = new Date(now); y.setDate(y.getDate()-1);
+    from = to = fmt(y);
+  } else if(key === 'minggu') {
+    const dow = now.getDay(); // 0=Sun
+    const mon = new Date(now); mon.setDate(now.getDate() - (dow===0?6:dow-1));
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    from = fmt(mon); to = fmt(sun);
+  } else if(key === 'bulan') {
+    from = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+    const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    to = fmt(lastDay);
+  } else {
+    from = ''; to = '';
+  }
+
+  // Set input values
+  const fEl = document.getElementById('log-date-from');
+  const tEl = document.getElementById('log-date-to');
+  if(fEl) { fEl.value = from; fEl.style.borderColor=''; }
+  if(tEl) { tEl.value = to;   tEl.style.borderColor=''; }
+
+  window._logState.dateFrom = from;
+  window._logState.dateTo   = to;
+
+  // Highlight tombol aktif
+  ['hari','kemarin','minggu','bulan','semua'].forEach(k=>{
+    const b = document.getElementById('qf-'+k);
+    if(!b) return;
+    if(k === key) {
+      b.style.background='rgba(29,175,168,0.15)'; b.style.color='var(--teal2)';
+      b.style.borderColor='rgba(29,175,168,0.35)';
+    } else {
+      b.style.background='rgba(255,255,255,0.06)'; b.style.color='var(--text2)';
+      b.style.borderColor='rgba(255,255,255,0.1)';
+    }
+  });
+
+  _applyLogFilters();
+};
+
+// Legacy: tetap ada agar tidak error jika ada call lama
+window._filterLog = function(type) { _setLogTab(type); };
 
 // ══════════════════════════════════════
 // USER MANAGEMENT (Admin only)
@@ -1536,6 +2011,294 @@ window._delUser=async function(id){
   toast('🗑 User dihapus'); renderUsers();
 };
 
+// ══════════════════════════════════════
+// PROFIL — EDIT DATA PRIBADI & GANTI PASSWORD
+// ══════════════════════════════════════
+async function renderProfil() {
+  const el = document.getElementById('page-profil');
+  el.innerHTML = `<div class="page-title">Profil Saya</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  // Ambil data terbaru dari Firestore
+  const snap = await getDoc(doc(db, 'users', CU.id));
+  const u = snap.exists() ? {id: snap.id, ...snap.data()} : CU;
+
+  // Avatar big
+  const av = initials(u.name);
+  const roleColors = {admin:'var(--red)',kadis:'var(--gold)',kabid:'var(--blue)',kasubag:'var(--teal)',staf:'var(--green)'};
+  const rc = roleColors[u.role] || 'var(--gold)';
+
+  const unitLabel = {sekretariat:'Sekretariat',p2p:'Bidang P2P',pelkes:'Bidang Pelayanan Kesehatan',kesmas:'Bidang Kesmas',sdk:'Bidang SDK',admin:'Administrator',dinkes:'Dinas Kesehatan'}[u.unit] || u.unit || '—';
+
+  el.innerHTML = `
+  <div class="page-title">Profil Saya</div>
+  <div class="page-sub">Kelola data pribadi dan keamanan akun Anda</div>
+
+  <div class="g2" style="align-items:start">
+
+    <!-- ── KARTU IDENTITAS ── -->
+    <div>
+      <div class="card" style="text-align:center;padding:32px 24px;margin-bottom:16px">
+        <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,${rc},${rc}aa);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:#fff;margin:0 auto 16px;box-shadow:0 8px 24px ${rc}44">${av}</div>
+        <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold2);margin-bottom:4px">${u.name}</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px">${u.label || '—'}</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <span class="badge badge-gold">${u.role}</span>
+          <span class="badge badge-blue">${unitLabel}</span>
+        </div>
+      </div>
+
+      <!-- Info read-only -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">ℹ️ Informasi Akun</span></div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div class="fl" style="margin-bottom:2px">ID Pengguna</div>
+            <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--teal2);background:rgba(29,175,168,0.08);padding:8px 12px;border-radius:6px;border:1px solid rgba(29,175,168,0.2)">${u.id}</div>
+          </div>
+          <div>
+            <div class="fl" style="margin-bottom:2px">Role / Jabatan Sistem</div>
+            <div style="font-size:13px;color:var(--text);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:6px;border:1px solid var(--border)">${u.role} — ${u.label || '—'}</div>
+          </div>
+          <div>
+            <div class="fl" style="margin-bottom:2px">Unit Kerja</div>
+            <div style="font-size:13px;color:var(--text);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:6px;border:1px solid var(--border)">${unitLabel}</div>
+          </div>
+          ${u.superior ? `<div>
+            <div class="fl" style="margin-bottom:2px">Atasan Langsung</div>
+            <div id="superior-name" style="font-size:13px;color:var(--text);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:6px;border:1px solid var(--border)">Memuat...</div>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── FORM EDIT ── -->
+    <div>
+      <!-- Edit Data Pribadi -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">✏️ Edit Data Pribadi</span></div>
+
+        <div class="fr">
+          <label class="fl">Nama Lengkap <span style="color:var(--red)">*</span></label>
+          <input class="fi" id="pf-name" value="${u.name || ''}" placeholder="Nama lengkap beserta gelar...">
+        </div>
+
+        <div class="fr">
+          <label class="fl">Jabatan / Label Tampilan <span style="color:var(--red)">*</span></label>
+          <input class="fi" id="pf-label" value="${u.label || ''}" placeholder="Contoh: Kasubag Keuangan & Aset">
+        </div>
+
+        <div class="fr">
+          <label class="fl">Nomor HP / WhatsApp</label>
+          <input class="fi" id="pf-phone" value="${u.phone || ''}" placeholder="08xxxxxxxxxx">
+        </div>
+
+        <div class="fr">
+          <label class="fl">Email</label>
+          <input type="email" class="fi" id="pf-email" value="${u.email || ''}" placeholder="nama@email.com">
+        </div>
+
+        <div class="fr">
+          <label class="fl">Catatan / Bio Singkat</label>
+          <textarea class="ft" id="pf-bio" style="min-height:72px" placeholder="Tulis catatan singkat tentang diri Anda...">${u.bio || ''}</textarea>
+        </div>
+
+        <div id="pf-msg" style="min-height:20px;font-size:13px;margin-bottom:8px"></div>
+        <button class="btn btn-gold w-full" onclick="_saveProfil()">💾 Simpan Data Pribadi</button>
+      </div>
+
+      <!-- Ganti Password -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔐 Ganti Password</span></div>
+
+        <div style="background:rgba(200,168,75,0.08);border:1px solid rgba(200,168,75,0.2);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.6">
+          ⚠️ Password baru minimal <strong>6 karakter</strong>. Setelah berhasil diubah, Anda akan diminta login ulang.
+        </div>
+
+        <div class="fr">
+          <label class="fl">Password Lama <span style="color:var(--red)">*</span></label>
+          <div style="position:relative">
+            <input type="password" class="fi" id="pw-old" placeholder="Masukkan password saat ini" style="padding-right:44px">
+            <button onclick="_togglePw('pw-old',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px">👁</button>
+          </div>
+        </div>
+
+        <div class="fr">
+          <label class="fl">Password Baru <span style="color:var(--red)">*</span></label>
+          <div style="position:relative">
+            <input type="password" class="fi" id="pw-new" placeholder="Minimal 6 karakter" style="padding-right:44px" oninput="_checkPwStrength(this.value)">
+            <button onclick="_togglePw('pw-new',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px">👁</button>
+          </div>
+          <!-- Password strength -->
+          <div style="margin-top:6px">
+            <div style="height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+              <div id="pw-strength-bar" style="height:100%;width:0%;border-radius:2px;transition:all 0.3s"></div>
+            </div>
+            <div id="pw-strength-label" style="font-size:11px;color:var(--text3);margin-top:3px"></div>
+          </div>
+        </div>
+
+        <div class="fr">
+          <label class="fl">Konfirmasi Password Baru <span style="color:var(--red)">*</span></label>
+          <div style="position:relative">
+            <input type="password" class="fi" id="pw-confirm" placeholder="Ulangi password baru" style="padding-right:44px">
+            <button onclick="_togglePw('pw-confirm',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px">👁</button>
+          </div>
+        </div>
+
+        <div id="pw-msg" style="min-height:20px;font-size:13px;margin-bottom:8px"></div>
+        <button class="btn btn-teal w-full" onclick="_changePassword()">🔐 Ubah Password</button>
+      </div>
+    </div>
+
+  </div>`;
+
+  // Load superior name async
+  if(u.superior) {
+    try {
+      const supSnap = await getDoc(doc(db, 'users', u.superior));
+      const supEl = document.getElementById('superior-name');
+      if(supEl) supEl.textContent = supSnap.exists() ? supSnap.data().name : '—';
+    } catch(e) {}
+  }
+}
+
+// ── PASSWORD VISIBILITY TOGGLE ──
+window._togglePw = function(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if(!inp) return;
+  const isHidden = inp.type === 'password';
+  inp.type = isHidden ? 'text' : 'password';
+  btn.textContent = isHidden ? '🙈' : '👁';
+};
+
+// ── PASSWORD STRENGTH CHECK ──
+window._checkPwStrength = function(val) {
+  const bar = document.getElementById('pw-strength-bar');
+  const lbl = document.getElementById('pw-strength-label');
+  if(!bar || !lbl) return;
+  let score = 0;
+  if(val.length >= 6) score++;
+  if(val.length >= 10) score++;
+  if(/[A-Z]/.test(val)) score++;
+  if(/[0-9]/.test(val)) score++;
+  if(/[^A-Za-z0-9]/.test(val)) score++;
+  const levels = [
+    {w:'0%', c:'', t:''},
+    {w:'20%', c:'var(--red)', t:'Sangat Lemah'},
+    {w:'40%', c:'var(--orange)', t:'Lemah'},
+    {w:'60%', c:'#d4a017', t:'Cukup'},
+    {w:'80%', c:'var(--teal)', t:'Kuat'},
+    {w:'100%', c:'var(--green)', t:'Sangat Kuat'},
+  ];
+  const lv = levels[Math.min(score, 5)];
+  bar.style.width = lv.w;
+  bar.style.background = lv.c;
+  lbl.textContent = lv.t;
+  lbl.style.color = lv.c;
+};
+
+// ── SAVE PROFILE ──
+window._saveProfil = async function() {
+  const msgEl = document.getElementById('pf-msg');
+  const name = document.getElementById('pf-name')?.value?.trim();
+  const label = document.getElementById('pf-label')?.value?.trim();
+  const phone = document.getElementById('pf-phone')?.value?.trim();
+  const email = document.getElementById('pf-email')?.value?.trim();
+  const bio = document.getElementById('pf-bio')?.value?.trim();
+
+  if(!name) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Nama lengkap wajib diisi.</span>'; return; }
+  if(!label) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Jabatan wajib diisi.</span>'; return; }
+
+  msgEl.innerHTML = '<span style="color:var(--teal2)"><span class="loading-spinner"></span> Menyimpan...</span>';
+
+  try {
+    const updates = {
+      name, label, phone, email, bio,
+      updatedAt: new Date().toISOString(),
+      updatedBy: CU.id
+    };
+    await updateDoc(doc(db, 'users', CU.id), updates);
+
+    // Update local state & session
+    CU = {...CU, name, label, phone, email, bio};
+    saveSession(CU);
+
+    // Update topbar
+    document.getElementById('tb-user').textContent = `${CU.name} — ${CU.label}`;
+    const avatarEl = document.getElementById('tb-avatar');
+    if(avatarEl) avatarEl.textContent = initials(CU.name);
+
+    msgEl.innerHTML = '<span style="color:#68d391">✅ Data pribadi berhasil disimpan!</span>';
+    toast('✅ Profil berhasil diperbarui!');
+
+    // Re-render profil page
+    setTimeout(() => renderProfil(), 1200);
+
+  } catch(e) {
+    msgEl.innerHTML = `<span style="color:var(--red)">❌ Gagal menyimpan: ${e.message}</span>`;
+  }
+};
+
+// ── CHANGE PASSWORD ──
+window._changePassword = async function() {
+  const msgEl = document.getElementById('pw-msg');
+  const oldPw = document.getElementById('pw-old')?.value;
+  const newPw = document.getElementById('pw-new')?.value;
+  const confirmPw = document.getElementById('pw-confirm')?.value;
+
+  // Validasi
+  if(!oldPw) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Masukkan password lama.</span>'; return; }
+  if(!newPw) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Masukkan password baru.</span>'; return; }
+  if(newPw.length < 6) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Password baru minimal 6 karakter.</span>'; return; }
+  if(newPw !== confirmPw) { msgEl.innerHTML = '<span style="color:var(--red)">⚠️ Konfirmasi password tidak cocok.</span>'; return; }
+  if(oldPw === newPw) { msgEl.innerHTML = '<span style="color:var(--orange)">⚠️ Password baru harus berbeda dari password lama.</span>'; return; }
+
+  msgEl.innerHTML = '<span style="color:var(--teal2)"><span class="loading-spinner"></span> Memverifikasi...</span>';
+
+  try {
+    // Verifikasi password lama ke Firestore
+    const snap = await getDoc(doc(db, 'users', CU.id));
+    if(!snap.exists()) { msgEl.innerHTML = '<span style="color:var(--red)">❌ Akun tidak ditemukan.</span>'; return; }
+    const userData = snap.data();
+
+    if(userData.pass !== oldPw) {
+      msgEl.innerHTML = '<span style="color:var(--red)">❌ Password lama salah.</span>';
+      document.getElementById('pw-old').value = '';
+      document.getElementById('pw-old').focus();
+      return;
+    }
+
+    msgEl.innerHTML = '<span style="color:var(--teal2)"><span class="loading-spinner"></span> Menyimpan password baru...</span>';
+
+    // Update password di Firestore
+    await updateDoc(doc(db, 'users', CU.id), {
+      pass: newPw,
+      passwordChangedAt: new Date().toISOString()
+    });
+
+    // Update session dengan password baru (CU tidak menyimpan pass, tapi hapus sesi lama)
+    clearSession();
+
+    msgEl.innerHTML = '<span style="color:#68d391">✅ Password berhasil diubah! Silakan login ulang.</span>';
+    toast('✅ Password diubah. Silakan login ulang.', 4000);
+
+    // Countdown logout
+    let sec = 3;
+    const interval = setInterval(() => {
+      sec--;
+      msgEl.innerHTML = `<span style="color:#68d391">✅ Password berhasil diubah! Login ulang dalam ${sec} detik...</span>`;
+      if(sec <= 0) {
+        clearInterval(interval);
+        doLogout();
+      }
+    }, 1000);
+
+  } catch(e) {
+    msgEl.innerHTML = `<span style="color:var(--red)">❌ Gagal mengubah password: ${e.message}</span>`;
+  }
+};
+
+})(); // end async IIFE
 </script>
 </body>
 </html>
