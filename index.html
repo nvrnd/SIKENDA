@@ -209,11 +209,11 @@ td.c-red{color:#fc8181} td.c-orange{color:#f6ad55} td.c-green{color:#68d391}
 <script>
 window.FIREBASE_CONFIG = {
 apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
-  authDomain: "sikenda-8e254.firebaseapp.com",
-  projectId: "sikenda-8e254",
-  storageBucket: "sikenda-8e254.firebasestorage.app",
-  messagingSenderId: "1778301169",
-  appId: "1:1778301169:web:5bd343473de131d3421150"
+authDomain: "sikenda-8e254.firebaseapp.com",
+projectId: "sikenda-8e254",
+storageBucket: "sikenda-8e254.firebasestorage.app",
+messagingSenderId: "1778301169",
+appId: "1:1778301169:web:5bd343473de131d3421150"
 };
 </script>
 
@@ -258,6 +258,7 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
     <div class="nav-section" style="margin-top:8px">VALIDASI</div>
     <div class="nav-item" onclick="showPage('validasi')" id="nav-validasi"><span class="nav-icon">✅</span>Validasi Atasan</div>
     <div class="nav-item" onclick="showPage('users')" id="nav-users" style="display:none"><span class="nav-icon">👥</span>Manajemen User</div>
+    <div class="nav-item" onclick="showPage('settings')" id="nav-settings" style="display:none"><span class="nav-icon">⚙️</span>Pengaturan Sistem</div>
     <div class="nav-section" style="margin-top:8px">AKUN</div>
     <div class="nav-item" onclick="showPage('profil')" id="nav-profil"><span class="nav-icon">👤</span>Profil Saya</div>
   </div>
@@ -271,6 +272,7 @@ apiKey: "AIzaSyBfKD__llMOC3V6_eL8WqjJHinxR0TDrPo",
     <div class="page" id="page-validasi"></div>
     <div class="page" id="page-users"></div>
     <div class="page" id="page-profil"></div>
+    <div class="page" id="page-settings"></div>
   </div>
 </div>
 
@@ -309,7 +311,18 @@ function formatDate(str) {
   return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 function formatRp(n) { if(!n) return 'Rp 0'; return 'Rp '+Number(n).toLocaleString('id-ID'); }
-function isAfterWork() { const now=new Date(); return now.getHours()>=16; }
+function isAfterWork() {
+  const now = new Date();
+  const lockHour = (window._appSettings && window._appSettings.lockHour !== undefined)
+    ? parseInt(window._appSettings.lockHour)
+    : 16;
+  const lockMinute = (window._appSettings && window._appSettings.lockMinute !== undefined)
+    ? parseInt(window._appSettings.lockMinute)
+    : 0;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const lockMins = lockHour * 60 + lockMinute;
+  return nowMins >= lockMins;
+}
 function progColor(p) { return p<50?'var(--red)':p<80?'var(--orange)':'var(--green)'; }
 function initials(name) { return (name||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase(); }
 function toast(msg, dur=3000) {
@@ -500,13 +513,22 @@ window.doLogout = function() {
 tryRestoreSession();
 
 // ── INIT APP ──
-function initApp() {
+async function initApp() {
   document.getElementById('tb-user').textContent=`${CU.name} — ${CU.label}`;
-  // Set avatar initials in topbar
   const avatarEl = document.getElementById('tb-avatar');
   if(avatarEl) avatarEl.textContent = initials(CU.name);
+  // Load global settings (jam lock dll) dari Firestore
+  try {
+    const settSnap = await getDoc(doc(db, 'settings', 'app'));
+    window._appSettings = settSnap.exists() ? settSnap.data() : { lockHour:16, lockMinute:0 };
+  } catch(e) {
+    window._appSettings = { lockHour:16, lockMinute:0 };
+  }
   startClock();
-  if(CU.role==='admin'||CU.role==='kadis') document.getElementById('nav-users').style.display='flex';
+  if(CU.role==='admin'||CU.role==='kadis') {
+    document.getElementById('nav-users').style.display='flex';
+    document.getElementById('nav-settings').style.display='flex';
+  }
   showPage('executive');
 }
 
@@ -520,7 +542,7 @@ window.showPage = function(id) {
   renderPage(id);
 };
 function renderPage(id) {
-  const map={executive:renderExecutive,daily:renderDaily,realisasi:renderRealisasi,indikator:renderIndikator,log:renderLog,validasi:renderValidasi,users:renderUsers,profil:renderProfil};
+  const map={executive:renderExecutive,daily:renderDaily,realisasi:renderRealisasi,indikator:renderIndikator,log:renderLog,validasi:renderValidasi,users:renderUsers,profil:renderProfil,settings:renderSettings};
   if(map[id]) map[id]();
 }
 
@@ -660,7 +682,15 @@ async function renderDaily() {
   const snap=await getDoc(doc(db,'daily',key));
   const data=snap.exists()?snap.data():{};
 
-  let h=`<div class="page-title">Catatan Harian</div><div class="page-sub">${CU.name} — ${formatDate(today)}</div>`;
+  let h=`<div class="flex-b mb-12" style="margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="page-title" style="margin-bottom:2px">Catatan Harian</div>
+      <div class="page-sub" style="margin-bottom:0">${CU.name} — ${formatDate(today)}</div>
+    </div>
+    <button class="btn btn-teal" onclick="_showExportDialog()" title="Export laporan harian ke Excel">
+      📊 Export Excel
+    </button>
+  </div>`;
 
   if(CU.role==='kadis') { h+=renderKadisDaily(); el.innerHTML=h; return; }
   if(CU.role==='admin') { h+=`<div class="card"><p class="text-muted">Admin tidak memiliki catatan harian. Gunakan menu Manajemen User.</p></div>`; el.innerHTML=h; return; }
@@ -795,8 +825,27 @@ function renderStafFormHtml(data) {
       <div class="fr"><label class="fl">Output Kegiatan</label><input class="fi" id="st-out-${i}" ${lk?'disabled':''} placeholder="Output yang dihasilkan..." value="${t.output||''}"></div>
       <div class="flex-b fr">
         <label class="fl" style="margin:0">Status</label>
-        ${lk ? (t.tuntas?`<span class="badge badge-green">✅ Tuntas</span>`:`<span class="badge badge-orange">⏳ Belum Tuntas</span>`)
-              : `<div class="flex gap-8"><button class="btn btn-green btn-sm" onclick="_setTask(${i},true)">✅ Tuntas</button><button class="btn btn-red btn-sm" onclick="_setTask(${i},false)">⏳ Belum</button></div>`}
+        ${lk
+          ? (t.tuntas
+              ? `<span class="badge badge-green" style="font-size:13px;padding:6px 14px">✅ TUNTAS</span>`
+              : `<span class="badge badge-orange" style="font-size:13px;padding:6px 14px">⏳ BELUM TUNTAS</span>`)
+          : `<div class="flex gap-8">
+              <button id="btn-tuntas-${i}" class="btn btn-sm" onclick="_setTask(${i},true)"
+                style="${t.tuntas
+                  ? 'background:var(--green);color:#fff;border:2px solid var(--green);box-shadow:0 0 12px rgba(56,161,105,0.5);font-weight:700'
+                  : 'background:rgba(56,161,105,0.12);color:#68d391;border:2px solid rgba(56,161,105,0.35)'
+                }">
+                ${t.tuntas ? '✅ TUNTAS ✓' : '○ Tuntas'}
+              </button>
+              <button id="btn-belum-${i}" class="btn btn-sm" onclick="_setTask(${i},false)"
+                style="${t.tuntas===false
+                  ? 'background:var(--orange);color:#fff;border:2px solid var(--orange);box-shadow:0 0 12px rgba(221,107,32,0.5);font-weight:700'
+                  : 'background:rgba(221,107,32,0.1);color:#f6ad55;border:2px solid rgba(221,107,32,0.3)'
+                }">
+                ${t.tuntas===false ? '⏳ BELUM ✓' : '○ Belum'}
+              </button>
+            </div>`
+        }
       </div></div>`;
   });
   h+=`</div>`;
@@ -2296,6 +2345,277 @@ window._changePassword = async function() {
   } catch(e) {
     msgEl.innerHTML = `<span style="color:var(--red)">❌ Gagal mengubah password: ${e.message}</span>`;
   }
+};
+
+// ══════════════════════════════════════
+// PENGATURAN SISTEM (Admin only)
+// ══════════════════════════════════════
+async function renderSettings() {
+  const el = document.getElementById('page-settings');
+  if(CU.role !== 'admin' && CU.role !== 'kadis') {
+    el.innerHTML = `<div class="card"><p class="text-red">⛔ Akses ditolak.</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="page-title">Pengaturan Sistem</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+
+  // Load settings
+  let sett = { lockHour: 16, lockMinute: 0 };
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'app'));
+    if(snap.exists()) sett = { ...sett, ...snap.data() };
+  } catch(e) {}
+  window._appSettings = sett;
+
+  const lockH = String(sett.lockHour || 16).padStart(2,'0');
+  const lockM = String(sett.lockMinute || 0).padStart(2,'0');
+
+  el.innerHTML = `
+  <div class="page-title">⚙️ Pengaturan Sistem</div>
+  <div class="page-sub">Konfigurasi sistem SIKENDA — hanya admin</div>
+
+  <!-- JAM LOCK -->
+  <div class="card" style="max-width:560px">
+    <div class="card-header"><span class="card-title">🔒 Pengaturan Jam Kunci Kegiatan Harian</span></div>
+    <p class="text-sm text-muted" style="margin-bottom:16px;line-height:1.7">
+      Setelah jam yang ditentukan, seluruh catatan kegiatan harian akan <strong>terkunci otomatis</strong> dan tidak bisa diedit lagi.
+      Pengaturan ini berlaku untuk semua pengguna.
+    </p>
+
+    <div style="background:rgba(200,168,75,0.08);border:1px solid rgba(200,168,75,0.25);border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px">
+      <div style="font-size:32px">🔒</div>
+      <div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:2px">Jam Kunci Aktif Saat Ini</div>
+        <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:700;color:var(--gold)" id="lock-display">${lockH}:${lockM} WIB</div>
+      </div>
+    </div>
+
+    <div class="g2" style="gap:16px;margin-bottom:16px">
+      <div class="fr" style="margin-bottom:0">
+        <label class="fl">Jam (00–23)</label>
+        <input type="number" class="fi" id="set-lock-hour" min="0" max="23" value="${sett.lockHour||16}"
+          oninput="_previewLock()" style="font-size:18px;font-family:'DM Mono',monospace;text-align:center">
+      </div>
+      <div class="fr" style="margin-bottom:0">
+        <label class="fl">Menit (00–59)</label>
+        <input type="number" class="fi" id="set-lock-min" min="0" max="59" value="${sett.lockMinute||0}"
+          oninput="_previewLock()" style="font-size:18px;font-family:'DM Mono',monospace;text-align:center">
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <div class="fl" style="margin-bottom:8px">Pilih Cepat</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${[['14:00','14','0'],['15:00','15','0'],['16:00','16','0'],['16:30','16','30'],['17:00','17','0'],['17:30','17','30'],['18:00','18','0']].map(([lbl,h,m])=>
+          `<button class="btn btn-sm" style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)" onclick="_quickLock('${h}','${m}')">${lbl}</button>`
+        ).join('')}
+      </div>
+    </div>
+
+    <div id="set-msg" style="min-height:20px;font-size:13px;margin-bottom:10px"></div>
+    <button class="btn btn-gold w-full" onclick="_saveLockTime()">💾 Simpan Pengaturan Jam Kunci</button>
+  </div>
+  `;
+}
+
+window._previewLock = function() {
+  const h = String(document.getElementById('set-lock-hour')?.value||16).padStart(2,'0');
+  const m = String(document.getElementById('set-lock-min')?.value||0).padStart(2,'0');
+  const disp = document.getElementById('lock-display');
+  if(disp) disp.textContent = `${h}:${m} WIB`;
+};
+window._quickLock = function(h, m) {
+  const hEl = document.getElementById('set-lock-hour');
+  const mEl = document.getElementById('set-lock-min');
+  if(hEl) hEl.value = h;
+  if(mEl) mEl.value = m;
+  _previewLock();
+};
+window._saveLockTime = async function() {
+  const msgEl = document.getElementById('set-msg');
+  const h = parseInt(document.getElementById('set-lock-hour')?.value);
+  const m = parseInt(document.getElementById('set-lock-min')?.value);
+  if(isNaN(h)||h<0||h>23){ msgEl.innerHTML='<span style="color:var(--red)">⚠️ Jam harus 0–23</span>'; return; }
+  if(isNaN(m)||m<0||m>59){ msgEl.innerHTML='<span style="color:var(--red)">⚠️ Menit harus 0–59</span>'; return; }
+  msgEl.innerHTML = '<span style="color:var(--teal2)"><span class="loading-spinner"></span> Menyimpan...</span>';
+  try {
+    await setDoc(doc(db,'settings','app'), { lockHour: h, lockMinute: m, updatedAt: new Date().toISOString(), updatedBy: CU.id }, {merge:true});
+    window._appSettings = { ...window._appSettings, lockHour: h, lockMinute: m };
+    const lockH = String(h).padStart(2,'0');
+    const lockM = String(m).padStart(2,'0');
+    msgEl.innerHTML = `<span style="color:#68d391">✅ Jam kunci berhasil diubah ke ${lockH}:${lockM} WIB — berlaku segera untuk semua user!</span>`;
+    toast(`✅ Jam kunci diubah ke ${lockH}:${lockM} WIB`);
+  } catch(e) {
+    msgEl.innerHTML = `<span style="color:var(--red)">❌ Gagal: ${e.message}</span>`;
+  }
+};
+
+// ══════════════════════════════════════
+// EXPORT EXCEL KEGIATAN HARIAN
+// ══════════════════════════════════════
+window._exportExcelHarian = async function(targetUserId, targetMonth, targetYear) {
+  toast('⏳ Menyiapkan data export...', 5000);
+
+  try {
+    // Load SheetJS
+    if(!window.XLSX) {
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    // Ambil data user
+    const userSnap = await getDoc(doc(db,'users', targetUserId));
+    const u = userSnap.exists() ? {id:userSnap.id,...userSnap.data()} : {id:targetUserId, name:targetUserId, label:'', unit:''};
+
+    // Ambil semua daily docs untuk bulan & user yang diminta
+    const pad = n => String(n).padStart(2,'0');
+    const monthStr = `${targetYear}-${pad(targetMonth)}`;
+
+    // Generate semua tanggal di bulan tsb
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const dayNames = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    const monthNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+    // Collect semua kegiatan dari semua hari
+    const rows = [];
+    let no = 1;
+    for(let d=1; d<=daysInMonth; d++) {
+      const dateStr = `${targetYear}-${pad(targetMonth)}-${pad(d)}`;
+      const key = `daily_${targetUserId}_${dateStr}`;
+      let snap;
+      try { snap = await getDoc(doc(db,'daily', key)); } catch(e) { continue; }
+      if(!snap.exists()) continue;
+      const data = snap.data();
+      const dt = new Date(dateStr+'T00:00:00');
+      const dayLabel = `${dayNames[dt.getDay()]}, ${d}-${monthNames[targetMonth].substring(0,3)}-${String(targetYear).slice(2)}`;
+
+      // Kumpulkan semua kegiatan dari role
+      let items = [];
+      if(u.role === 'staf') {
+        items = (data.tasks||[]).filter(t=>t.desc).map(t=>({
+          desc: t.desc, output: t.output||'', volume: 1, ket: t.tuntas?'Tuntas':'Belum'
+        }));
+      } else if(u.role === 'kabid') {
+        items = (data.works||[]).filter(w=>w.desc).map(w=>({
+          desc: w.desc, output: w.output||'', volume: 1, ket: `${w.progress||0}%`
+        }));
+      } else if(u.role === 'kasubag') {
+        const reg = (data.works||[]).filter(w=>w.desc).map(w=>({desc:`[Reguler] ${w.desc}`, output:w.output||'', volume:1, ket:`${w.progress||0}%`}));
+        const urg = (data.urgent||[]).filter(u=>u.desc).map(u=>({desc:`[Mendesak] ${u.desc}`, output:u.output||'', volume:1, ket:`${u.progress||0}%`}));
+        items = [...reg, ...urg];
+      }
+
+      if(!items.length) continue;
+      items.forEach((item, idx) => {
+        rows.push({
+          no: idx===0 ? no++ : '',
+          hariTanggal: idx===0 ? dayLabel : '',
+          subNo: idx+1,
+          uraian: item.desc,
+          volume: item.volume||1,
+          ket: item.ket||'',
+        });
+      });
+    }
+
+    // Build worksheet
+    const wb = window.XLSX.utils.book_new();
+
+    // Header info
+    const titleMonth = `${monthNames[targetMonth]} ${targetYear}`;
+    const wsData = [
+      [''],
+      [`LAPORAN KEGIATAN HARIAN BULAN ${titleMonth.toUpperCase()}`],
+      [''],
+      ['NAMA', u.name||''],
+      ['NIP', u.nip||''],
+      ['PANGKAT/GOL', u.pangkat||''],
+      ['JABATAN', u.label||''],
+      ['UNIT KERJA', ({sekretariat:'Sekretariat',p2p:'Bidang P2P',pelkes:'Bidang Pelayanan Kesehatan',kesmas:'Bidang Kesmas',sdk:'Bidang SDK'}[u.unit])||u.unit||''],
+      [''],
+      ['No','Hari / Tanggal','','Uraian Kegiatan','','Volume','Ket'],
+    ];
+
+    if(!rows.length) {
+      wsData.push(['','','','Tidak ada data kegiatan di bulan ini','','','']);
+    } else {
+      rows.forEach(r => {
+        wsData.push([r.no, r.hariTanggal, r.subNo, r.uraian, '', r.volume, r.ket]);
+      });
+    }
+
+    wsData.push(['']);
+    wsData.push(['','','','','','','']);
+    wsData.push(['','Mengetahui,','','','','Yang Membuat,','']);
+    wsData.push(['','Atasan Langsung','','','','','']);
+    wsData.push(['','','','','','','']);
+    wsData.push(['','','','','','','']);
+    wsData.push(['',`(................................)`,'',' ','',`(${u.name})`,'' ]);
+
+    const ws = window.XLSX.utils.aoa_to_sheet(wsData);
+
+    // Column widths
+    ws['!cols'] = [{wch:6},{wch:20},{wch:4},{wch:50},{wch:4},{wch:10},{wch:12}];
+
+    // Merge cells for title
+    ws['!merges'] = [
+      {s:{r:1,c:0}, e:{r:1,c:6}}, // Title
+      {s:{r:9,c:2}, e:{r:9,c:4}}, // Header "Uraian Kegiatan"
+    ];
+
+    window.XLSX.utils.book_append_sheet(wb, ws, 'Kegiatan Harian');
+    window.XLSX.writeFile(wb, `Laporan_Harian_${u.name.replace(/[^a-zA-Z0-9]/g,'_')}_${titleMonth.replace(' ','_')}.xlsx`);
+    toast('✅ File Excel berhasil diunduh!');
+
+  } catch(e) {
+    toast('❌ Gagal export: ' + e.message, 5000);
+    console.error(e);
+  }
+};
+
+// ── Tampilkan dialog pilih bulan/user untuk export ──
+window._showExportDialog = async function() {
+  const now = new Date();
+  // Jika admin/kadis bisa pilih user, selain itu langsung pakai diri sendiri
+  const canChooseUser = CU.role==='admin'||CU.role==='kadis';
+
+  let userOpts = `<option value="${CU.id}" selected>${CU.name}</option>`;
+  if(canChooseUser) {
+    if(!ALL_USERS.length) {
+      const us = await getDocs(collection(db,'users'));
+      ALL_USERS = us.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
+    }
+    userOpts = ALL_USERS.sort((a,b)=>a.name.localeCompare(b.name))
+      .map(u=>`<option value="${u.id}">${u.name} — ${u.label}</option>`).join('');
+  }
+
+  const monthOpts = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+    .map((m,i)=>`<option value="${i+1}" ${i+1===now.getMonth()+1?'selected':''}>${m}</option>`).join('');
+
+  showModal(`
+    <div class="modal-title">📊 Export Laporan Kegiatan Harian</div>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Data akan diekspor ke format Excel (.xlsx) sesuai format laporan resmi.</p>
+    ${canChooseUser?`<div class="fr"><label class="fl">Pilih Pegawai</label><select class="fs" id="exp-user">${userOpts}</select></div>`:''}
+    <div class="g2">
+      <div class="fr"><label class="fl">Bulan</label><select class="fs" id="exp-month">${monthOpts}</select></div>
+      <div class="fr"><label class="fl">Tahun</label><input type="number" class="fi" id="exp-year" value="${now.getFullYear()}" min="2024" max="2030"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-red btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-gold btn-sm" onclick="_doExport()">📊 Export Excel</button>
+    </div>
+  `);
+};
+
+window._doExport = async function() {
+  const uid   = document.getElementById('exp-user')?.value || CU.id;
+  const month = parseInt(document.getElementById('exp-month')?.value || new Date().getMonth()+1);
+  const year  = parseInt(document.getElementById('exp-year')?.value  || new Date().getFullYear());
+  _closeModal();
+  await _exportExcelHarian(uid, month, year);
 };
 
 })(); // end async IIFE
