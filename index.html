@@ -529,7 +529,45 @@ async function initApp() {
     document.getElementById('nav-users').style.display='flex';
     document.getElementById('nav-settings').style.display='flex';
   }
+  // Carry forward kegiatan staf yang belum tuntas dari kemarin
+  if(CU.role==='staf') await _carryForwardStafTasks();
   showPage('executive');
+}
+
+// ── CARRY FORWARD: bawa kegiatan belum tuntas dari hari kemarin ke hari ini ──
+async function _carryForwardStafTasks() {
+  const yest = getYesterdayStr();
+  const yestKey = `daily_${CU.id}_${yest}`;
+  const todayKey = `daily_${CU.id}_${today}`;
+  try {
+    const [ySnap, tSnap] = await Promise.all([
+      getDoc(doc(db,'daily',yestKey)),
+      getDoc(doc(db,'daily',todayKey))
+    ]);
+    if(!ySnap.exists()) return;
+    const yData = ySnap.data();
+    const tData = tSnap.exists() ? tSnap.data() : {};
+    const yTasks = yData.tasks || [];
+    // Ambil kegiatan kemarin yang belum tuntas (tuntas !== true)
+    const unfinished = yTasks.filter(t => t.desc && t.tuntas !== true).map(t => ({
+      desc: t.desc,
+      output: t.output || '',
+      volume: t.volume || 1,
+      ket: t.ket || '',
+      tuntas: undefined,       // reset status
+      carriedFrom: yest,       // tandai asal tanggal
+    }));
+    if(!unfinished.length) return;
+    // Gabung dengan kegiatan hari ini yang sudah ada (hindari duplikat berdasarkan desc+carriedFrom)
+    const todayTasks = tData.tasks || [];
+    const existingCarried = new Set(todayTasks.filter(t=>t.carriedFrom).map(t=>`${t.desc}|${t.carriedFrom}`));
+    const toAdd = unfinished.filter(u => !existingCarried.has(`${u.desc}|${u.carriedFrom}`));
+    if(!toAdd.length) return;
+    const merged = [...toAdd, ...todayTasks]; // carry-forward di atas agar tampil lebih dulu
+    await setDoc(doc(db,'daily',todayKey), {...tData, tasks:merged, updatedAt:new Date().toISOString()}, {merge:false});
+  } catch(e) {
+    console.warn('Carry forward error:', e.message);
+  }
 }
 
 // ── NAVIGATION ──
@@ -816,13 +854,24 @@ function renderStafFormHtml(data) {
   <div id="staf-tasks-wrap">`;
   tasks.forEach((t,i)=>{
     const lk=locked||data.validated;
-    h+=`<div class="work-box mb-12" style="margin-bottom:12px" id="stask-${i}">
+    const isCarried = !!t.carriedFrom;
+    h+=`<div class="work-box mb-12" style="margin-bottom:12px;${isCarried?'border-color:rgba(200,168,75,0.4);':''}" id="stask-${i}">
       <div class="flex-b mb-8" style="margin-bottom:8px">
-        <div class="work-box-num" style="margin-bottom:0">📌 Kegiatan ${i+1}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="work-box-num" style="margin-bottom:0">📌 Kegiatan ${i+1}</div>
+          ${isCarried?`<span class="badge badge-gold" style="font-size:10px;padding:2px 8px" title="Dilanjutkan dari ${t.carriedFrom}">↩ Lanjutan</span>`:''}
+        </div>
         ${!lk?`<button class="btn btn-red btn-xs" onclick="_hapusStafTask(${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
       </div>
-      <div class="fr"><label class="fl">Rencana Kegiatan</label><textarea class="ft" id="st-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan kegiatan hari ini...">${t.desc||''}</textarea></div>
-      <div class="fr"><label class="fl">Output Kegiatan</label><input class="fi" id="st-out-${i}" ${lk?'disabled':''} placeholder="Output yang dihasilkan..." value="${t.output||''}"></div>
+      ${isCarried?`<div style="font-size:11px;color:var(--gold);margin-bottom:8px;padding:4px 8px;background:rgba(200,168,75,0.08);border-radius:4px">↩ Dilanjutkan dari: ${formatDate(t.carriedFrom)}</div>`:''}
+      <div class="fr"><label class="fl">Uraian Kegiatan</label><textarea class="ft" id="st-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan kegiatan hari ini...">${t.desc||''}</textarea></div>
+      <div class="g2" style="gap:10px">
+        <div class="fr" style="margin-bottom:0"><label class="fl">Volume</label>
+          <input type="number" class="fi" id="st-vol-${i}" ${lk?'disabled':''} min="1" placeholder="1" value="${t.volume||1}" style="text-align:center"></div>
+        <div class="fr" style="margin-bottom:0"><label class="fl">Keterangan (satuan/jenis)</label>
+          <input class="fi" id="st-ket-${i}" ${lk?'disabled':''} placeholder="Laporan / Unit / Dokumen..." value="${t.ket||''}"></div>
+      </div>
+      <div style="height:10px"></div>
       <div class="flex-b fr">
         <label class="fl" style="margin:0">Status</label>
         ${lk
@@ -933,8 +982,9 @@ window._hapusStafTask = async function(i) {
   // Simpan nilai terkini input sebelum hapus
   tasks.forEach((t,idx)=>{
     if(idx!==i){
-      t.desc=document.getElementById(`st-desc-${idx}`)?.value||t.desc||'';
-      t.output=document.getElementById(`st-out-${idx}`)?.value||t.output||'';
+      t.desc   = document.getElementById(`st-desc-${idx}`)?.value || t.desc   || '';
+      t.volume = parseInt(document.getElementById(`st-vol-${idx}`)?.value  || t.volume || 1);
+      t.ket    = document.getElementById(`st-ket-${idx}`)?.value  || t.ket   || '';
     }
   });
   // Hapus item index i
@@ -998,9 +1048,12 @@ window._setTask = async function(i, tuntas) {
   const data=snap.exists()?snap.data():{};
   if(!data.tasks) data.tasks=[];
   while(data.tasks.length<=i) data.tasks.push({});
-  data.tasks[i].tuntas=tuntas;
-  data.tasks[i].desc=document.getElementById(`st-desc-${i}`)?.value||data.tasks[i].desc||'';
-  data.tasks[i].output=document.getElementById(`st-out-${i}`)?.value||data.tasks[i].output||'';
+  data.tasks[i].tuntas = tuntas;
+  data.tasks[i].desc   = document.getElementById(`st-desc-${i}`)?.value || data.tasks[i].desc  || '';
+  data.tasks[i].volume = parseInt(document.getElementById(`st-vol-${i}`)?.value || data.tasks[i].volume || 1);
+  data.tasks[i].ket    = document.getElementById(`st-ket-${i}`)?.value  || data.tasks[i].ket   || '';
+  // Jika tuntas, hapus flag carriedFrom agar tidak carry lagi besok
+  if(tuntas) delete data.tasks[i].carriedFrom;
   await setDoc(doc(db,'daily',key),data,{merge:false});
   renderDaily();
 };
@@ -1008,13 +1061,14 @@ window._addTask = async function() {
   const key=`daily_${CU.id}_${today}`;
   const snap=await getDoc(doc(db,'daily',key));
   const data=snap.exists()?snap.data():{};
-  // Save current values first
   const tasks=data.tasks||[];
+  // Simpan nilai input terkini sebelum re-render
   tasks.forEach((t,i)=>{
-    t.desc=document.getElementById(`st-desc-${i}`)?.value||t.desc||'';
-    t.output=document.getElementById(`st-out-${i}`)?.value||t.output||'';
+    t.desc   = document.getElementById(`st-desc-${i}`)?.value || t.desc   || '';
+    t.volume = parseInt(document.getElementById(`st-vol-${i}`)?.value  || t.volume || 1);
+    t.ket    = document.getElementById(`st-ket-${i}`)?.value  || t.ket   || '';
   });
-  tasks.push({});
+  tasks.push({ volume: 1 });
   data.tasks=tasks;
   await setDoc(doc(db,'daily',key),data,{merge:false});
   renderDaily();
@@ -1023,11 +1077,18 @@ async function saveStafTasks(existing) {
   const key=`daily_${CU.id}_${today}`;
   const tasks=(existing.tasks||[]).map((t,i)=>({
     ...t,
-    desc:document.getElementById(`st-desc-${i}`)?.value||t.desc||'',
-    output:document.getElementById(`st-out-${i}`)?.value||t.output||''
+    desc:   document.getElementById(`st-desc-${i}`)?.value || t.desc   || '',
+    volume: parseInt(document.getElementById(`st-vol-${i}`)?.value  || t.volume || 1),
+    ket:    document.getElementById(`st-ket-${i}`)?.value  || t.ket   || '',
   }));
   for(const t of tasks) {
-    if(t.tuntas&&t.desc) await addLog({type:'staf_task',user:CU.id,userName:CU.name,userLabel:CU.label,unit:CU.unit,date:today,desc:t.desc,output:t.output||''});
+    if(t.tuntas && t.desc) {
+      await addLog({
+        type:'staf_task', user:CU.id, userName:CU.name, userLabel:CU.label,
+        unit:CU.unit, date:today, desc:t.desc,
+        volume: t.volume||1, ket: t.ket||''
+      });
+    }
   }
   await setDoc(doc(db,'daily',key),{...existing,tasks,updatedAt:new Date().toISOString()},{merge:true});
   toast('✅ Kegiatan disimpan!'); renderDaily();
@@ -2496,27 +2557,30 @@ window._exportExcelHarian = async function(targetUserId, targetMonth, targetYear
       let items = [];
       if(u.role === 'staf') {
         items = (data.tasks||[]).filter(t=>t.desc).map(t=>({
-          desc: t.desc, output: t.output||'', volume: 1, ket: t.tuntas?'Tuntas':'Belum'
+          desc: t.desc,
+          volume: t.volume || 1,
+          ket: t.ket || (t.tuntas ? 'Tuntas' : 'Belum Tuntas')
         }));
       } else if(u.role === 'kabid') {
         items = (data.works||[]).filter(w=>w.desc).map(w=>({
-          desc: w.desc, output: w.output||'', volume: 1, ket: `${w.progress||0}%`
+          desc: w.desc, volume: 1, ket: `${w.progress||0}%`
         }));
       } else if(u.role === 'kasubag') {
-        const reg = (data.works||[]).filter(w=>w.desc).map(w=>({desc:`[Reguler] ${w.desc}`, output:w.output||'', volume:1, ket:`${w.progress||0}%`}));
-        const urg = (data.urgent||[]).filter(u=>u.desc).map(u=>({desc:`[Mendesak] ${u.desc}`, output:u.output||'', volume:1, ket:`${u.progress||0}%`}));
+        const reg = (data.works||[]).filter(w=>w.desc).map(w=>({desc:`[Reguler] ${w.desc}`, volume:1, ket:`${w.progress||0}%`}));
+        const urg = (data.urgent||[]).filter(u=>u.desc).map(u=>({desc:`[Mendesak] ${u.desc}`, volume:1, ket:`${u.progress||0}%`}));
         items = [...reg, ...urg];
       }
 
       if(!items.length) continue;
+      const dayNo = no++;
       items.forEach((item, idx) => {
         rows.push({
-          no: idx===0 ? no++ : '',
+          no:          idx===0 ? dayNo : '',
           hariTanggal: idx===0 ? dayLabel : '',
-          subNo: idx+1,
-          uraian: item.desc,
-          volume: item.volume||1,
-          ket: item.ket||'',
+          subNo:       idx+1,
+          uraian:      item.desc || '—',
+          volume:      item.volume || 1,
+          ket:         item.ket || '',
         });
       });
     }
@@ -2526,24 +2590,33 @@ window._exportExcelHarian = async function(targetUserId, targetMonth, targetYear
 
     // Header info
     const titleMonth = `${monthNames[targetMonth]} ${targetYear}`;
+    const unitMap = {sekretariat:'Sekretariat',p2p:'Bidang P2P',pelkes:'Bidang Pelayanan Kesehatan',kesmas:'Bidang Kesmas',sdk:'Bidang SDK'};
     const wsData = [
-      [''],
-      [`LAPORAN KEGIATAN HARIAN BULAN ${titleMonth.toUpperCase()}`],
-      [''],
-      ['NAMA', u.name||''],
-      ['NIP', u.nip||''],
-      ['PANGKAT/GOL', u.pangkat||''],
-      ['JABATAN', u.label||''],
-      ['UNIT KERJA', ({sekretariat:'Sekretariat',p2p:'Bidang P2P',pelkes:'Bidang Pelayanan Kesehatan',kesmas:'Bidang Kesmas',sdk:'Bidang SDK'}[u.unit])||u.unit||''],
-      [''],
-      ['No','Hari / Tanggal','','Uraian Kegiatan','','Volume','Ket'],
+      ['','','','','','',''],                                           // row 1: kosong
+      ['','',`LAPORAN KEGIATAN HARIAN BULAN ${titleMonth.toUpperCase()}`,'','','',''], // row 2: judul
+      ['','','','','','',''],                                           // row 3: kosong
+      ['NAMA','',u.name||'','','','',''],
+      ['NIP','',u.nip||'','','','',''],
+      ['PANGKAT/GOL','',u.pangkat||'','','','',''],
+      ['JABATAN','',u.label||'','','','',''],
+      ['UNIT KERJA','',(unitMap[u.unit]||u.unit||''),'','','',''],
+      ['','','','','','',''],                                           // row 9: kosong
+      ['No','Hari / Tanggal','','Uraian Kegiatan','','Volume','Ket'],  // row 10: header tabel
     ];
 
     if(!rows.length) {
       wsData.push(['','','','Tidak ada data kegiatan di bulan ini','','','']);
     } else {
       rows.forEach(r => {
-        wsData.push([r.no, r.hariTanggal, r.subNo, r.uraian, '', r.volume, r.ket]);
+        wsData.push([
+          r.no,          // col A: No (nomor hari)
+          r.hariTanggal, // col B: Hari / Tanggal
+          r.subNo,       // col C: nomor urut kegiatan
+          r.uraian,      // col D: Uraian Kegiatan
+          '',            // col E: kosong (space sebelum volume)
+          r.volume,      // col F: Volume
+          r.ket          // col G: Ket
+        ]);
       });
     }
 
@@ -2558,13 +2631,27 @@ window._exportExcelHarian = async function(targetUserId, targetMonth, targetYear
     const ws = window.XLSX.utils.aoa_to_sheet(wsData);
 
     // Column widths
-    ws['!cols'] = [{wch:6},{wch:20},{wch:4},{wch:50},{wch:4},{wch:10},{wch:12}];
+    ws['!cols'] = [{wch:5},{wch:18},{wch:5},{wch:52},{wch:2},{wch:8},{wch:14}];
 
-    // Merge cells for title
+    // Merge cells
     ws['!merges'] = [
-      {s:{r:1,c:0}, e:{r:1,c:6}}, // Title
-      {s:{r:9,c:2}, e:{r:9,c:4}}, // Header "Uraian Kegiatan"
+      {s:{r:1,c:2}, e:{r:1,c:6}},  // Judul — C2:G2
+      {s:{r:3,c:2}, e:{r:3,c:6}},  // NAMA value — C4:G4
+      {s:{r:4,c:2}, e:{r:4,c:6}},  // NIP value
+      {s:{r:5,c:2}, e:{r:5,c:6}},  // PANGKAT value
+      {s:{r:6,c:2}, e:{r:6,c:6}},  // JABATAN value
+      {s:{r:7,c:2}, e:{r:7,c:6}},  // UNIT KERJA value
+      {s:{r:9,c:3}, e:{r:9,c:4}},  // Header "Uraian Kegiatan" — D10:E10
     ];
+
+    // Style — bold judul dan header (jika SheetJS versi mendukung)
+    const titleCell = ws['C2'];
+    if(titleCell) titleCell.s = { font:{bold:true}, alignment:{horizontal:'center'} };
+    const headerRow = 9;
+    ['A','B','C','D','F','G'].forEach(col=>{
+      const cell = ws[col+(headerRow+1)];
+      if(cell) cell.s = { font:{bold:true}, fill:{fgColor:{rgb:'E0E0E0'}}, border:{bottom:{style:'thin'}} };
+    });
 
     window.XLSX.utils.book_append_sheet(wb, ws, 'Kegiatan Harian');
     window.XLSX.writeFile(wb, `Laporan_Harian_${u.name.replace(/[^a-zA-Z0-9]/g,'_')}_${titleMonth.replace(' ','_')}.xlsx`);
