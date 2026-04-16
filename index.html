@@ -529,8 +529,10 @@ async function initApp() {
     document.getElementById('nav-users').style.display='flex';
     document.getElementById('nav-settings').style.display='flex';
   }
-  // Carry forward kegiatan staf yang belum tuntas dari kemarin
-  if(CU.role==='staf') await _carryForwardStafTasks();
+  // Carry forward kegiatan yang belum selesai dari hari-hari sebelumnya
+  if(CU.role==='staf')    await _carryForwardStafTasks();
+  if(CU.role==='kabid')   await _carryForwardKabidWorks();
+  if(CU.role==='kasubag') await _carryForwardKasubagWorks();
   showPage('executive');
 }
 
@@ -599,6 +601,144 @@ async function _carryForwardStafTasks() {
   } catch(e) {
     console.warn('Carry forward error:', e.message);
   }
+}
+
+// ── CARRY FORWARD KABID (pekerjaan strategis belum 100%) ──
+async function _carryForwardKabidWorks() {
+  const todayKey = `daily_${CU.id}_${today}`;
+  try {
+    const tSnap = await getDoc(doc(db,'daily',todayKey));
+    const tData = tSnap.exists() ? tSnap.data() : {};
+    // Hanya carry jika hari ini belum ada data sama sekali
+    if(tData.works && tData.works.some(w=>w.desc)) return;
+
+    // Cari pekerjaan belum 100% dari 7 hari ke belakang
+    for(let d=1; d<=7; d++){
+      const prev = new Date(); prev.setDate(prev.getDate()-d);
+      const prevStr = prev.toISOString().split('T')[0];
+      if(prevStr===today) continue;
+      const prevKey = `daily_${CU.id}_${prevStr}`;
+      let prevSnap;
+      try { prevSnap = await getDoc(doc(db,'daily',prevKey)); } catch(e){ continue; }
+      if(!prevSnap.exists()) continue;
+      const prevData = prevSnap.data();
+      const prevWorks = prevData.works||[];
+      // Ambil pekerjaan yang belum 100% dan belum divalidasi Kadis
+      const unfinished = prevWorks.filter(w=>w.desc && parseInt(w.progress||0)<100 && !w.validatedKadis)
+        .map(w=>({
+          ...w,
+          progress: w.progress||0,
+          validatedKadis: false,
+          noteKadis: '',
+          carriedFrom: prevStr,
+        }));
+      if(!unfinished.length) continue;
+      // Isi slot kosong dengan pekerjaan yang belum selesai
+      const newWorks = [...unfinished];
+      while(newWorks.length<3) newWorks.push({});
+      await setDoc(doc(db,'daily',todayKey),
+        {...tData, works:newWorks.slice(0,3), updatedAt:new Date().toISOString()},
+        {merge:false}
+      );
+      console.log(`Kabid carry: ${unfinished.length} pekerjaan dari ${prevStr}`);
+      return; // cukup ambil dari 1 hari saja (hari terakhir ada data)
+    }
+  } catch(e){ console.warn('Carry kabid error:', e.message); }
+}
+
+// ── CARRY FORWARD KASUBAG (pekerjaan reguler & mendesak belum 100%) ──
+async function _carryForwardKasubagWorks() {
+  const todayKey = `daily_${CU.id}_${today}`;
+  try {
+    const tSnap = await getDoc(doc(db,'daily',todayKey));
+    const tData = tSnap.exists() ? tSnap.data() : {};
+    // Hanya carry jika hari ini kosong
+    const hasToday = (tData.works||[]).some(w=>w.desc)||(tData.urgent||[]).some(u=>u.desc);
+    if(hasToday) return;
+
+    for(let d=1; d<=7; d++){
+      const prev = new Date(); prev.setDate(prev.getDate()-d);
+      const prevStr = prev.toISOString().split('T')[0];
+      if(prevStr===today) continue;
+      const prevKey = `daily_${CU.id}_${prevStr}`;
+      let prevSnap;
+      try { prevSnap = await getDoc(doc(db,'daily',prevKey)); } catch(e){ continue; }
+      if(!prevSnap.exists()) continue;
+      const prevData = prevSnap.data();
+
+      const unfinishedWorks = (prevData.works||[])
+        .filter(w=>w.desc && parseInt(w.progress||0)<100 && !w.validated)
+        .map(w=>({...w, validated:false, noteAtasan:'', carriedFrom:prevStr}));
+
+      const unfinishedUrgent = (prevData.urgent||[])
+        .filter(u=>u.desc && parseInt(u.progress||0)<100 && !u.validated)
+        .map(u=>({...u, validated:false, noteAtasan:'', carriedFrom:prevStr}));
+
+      if(!unfinishedWorks.length && !unfinishedUrgent.length) continue;
+
+      const newWorks = [...unfinishedWorks]; while(newWorks.length<3) newWorks.push({});
+      const newUrgent = [...unfinishedUrgent]; while(newUrgent.length<3) newUrgent.push({});
+
+      await setDoc(doc(db,'daily',todayKey),
+        {...tData, works:newWorks.slice(0,3), urgent:newUrgent.slice(0,3), updatedAt:new Date().toISOString()},
+        {merge:false}
+      );
+      console.log(`Kasubag carry: ${unfinishedWorks.length} reguler, ${unfinishedUrgent.length} urgent dari ${prevStr}`);
+      return;
+    }
+  } catch(e){ console.warn('Carry kasubag error:', e.message); }
+}
+
+// ── CARRY FORWARD KABID (pekerjaan strategis belum 100%) ──
+async function _carryForwardKabidWorks() {
+  const todayKey = `daily_${CU.id}_${today}`;
+  try {
+    const tSnap = await getDoc(doc(db,'daily',todayKey));
+    const tData = tSnap.exists() ? tSnap.data() : {};
+    if(tData.works && tData.works.some(w=>w.desc)) return;
+    for(let d=1; d<=7; d++){
+      const prev=new Date(); prev.setDate(prev.getDate()-d);
+      const prevStr=prev.toISOString().split('T')[0];
+      if(prevStr===today) continue;
+      let prevSnap; try{prevSnap=await getDoc(doc(db,'daily',`daily_${CU.id}_${prevStr}`));}catch(e){continue;}
+      if(!prevSnap||!prevSnap.exists()) continue;
+      const prevData=prevSnap.data();
+      const unfinished=(prevData.works||[]).filter(w=>w.desc&&parseInt(w.progress||0)<100&&!w.validatedKadis)
+        .map(w=>({...w,validated:false,validatedKadis:false,noteKadis:'',carriedFrom:prevStr}));
+      if(!unfinished.length) continue;
+      const newWorks=[...unfinished]; while(newWorks.length<3) newWorks.push({});
+      await setDoc(doc(db,'daily',todayKey),{...tData,works:newWorks.slice(0,3),updatedAt:new Date().toISOString()},{merge:false});
+      return;
+    }
+  } catch(e){ console.warn('Carry kabid:',e.message); }
+}
+
+// ── CARRY FORWARD KASUBAG (pekerjaan reguler & mendesak belum 100%) ──
+async function _carryForwardKasubagWorks() {
+  const todayKey = `daily_${CU.id}_${today}`;
+  try {
+    const tSnap = await getDoc(doc(db,'daily',todayKey));
+    const tData = tSnap.exists() ? tSnap.data() : {};
+    const hasToday=(tData.works||[]).some(w=>w.desc)||(tData.urgent||[]).some(u=>u.desc);
+    if(hasToday) return;
+    for(let d=1; d<=7; d++){
+      const prev=new Date(); prev.setDate(prev.getDate()-d);
+      const prevStr=prev.toISOString().split('T')[0];
+      if(prevStr===today) continue;
+      let prevSnap; try{prevSnap=await getDoc(doc(db,'daily',`daily_${CU.id}_${prevStr}`));}catch(e){continue;}
+      if(!prevSnap||!prevSnap.exists()) continue;
+      const prevData=prevSnap.data();
+      const uW=(prevData.works||[]).filter(w=>w.desc&&parseInt(w.progress||0)<100&&!w.validated)
+        .map(w=>({...w,validated:false,noteAtasan:'',carriedFrom:prevStr}));
+      const uU=(prevData.urgent||[]).filter(u=>u.desc&&parseInt(u.progress||0)<100&&!u.validated)
+        .map(u=>({...u,validated:false,noteAtasan:'',carriedFrom:prevStr}));
+      if(!uW.length&&!uU.length) continue;
+      const nW=[...uW]; while(nW.length<3) nW.push({});
+      const nU=[...uU]; while(nU.length<3) nU.push({});
+      await setDoc(doc(db,'daily',todayKey),{...tData,works:nW.slice(0,3),urgent:nU.slice(0,3),updatedAt:new Date().toISOString()},{merge:false});
+      return;
+    }
+  } catch(e){ console.warn('Carry kasubag:',e.message); }
 }
 
 // ── NAVIGATION ──
@@ -1430,154 +1570,275 @@ window._hapusStafTask = function(idx) {
 };
 
 // ══════════════════════════════════════
-// VALIDASI
+// VALIDASI — dengan filter tanggal
 // ══════════════════════════════════════
+
+// ── State tanggal validasi aktif ──
+window._valDate = today; // default hari ini
+
 async function renderValidasi() {
-  const el=document.getElementById('page-validasi');
-  el.innerHTML=`<div class="page-title">Validasi Atasan</div><div class="page-sub">Validasi catatan bawahan langsung — ${formatDate(today)}</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
+  const el = document.getElementById('page-validasi');
+  el.innerHTML = `<div class="page-title">Validasi Atasan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
 
-  // Load all users from Firestore
-  const usSnap=await getDocs(collection(db,'users'));
-  ALL_USERS=usSnap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
+  // Load users
+  const usSnap = await getDocs(collection(db,'users'));
+  ALL_USERS = usSnap.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.active!==false);
 
-  let reports=[];
-  if(CU.role==='kadis') reports=ALL_USERS.filter(u=>u.role==='kabid'||u.id==='sekretaris');
-  else reports=ALL_USERS.filter(u=>u.superior===CU.id);
+  let reports = [];
+  if(CU.role==='kadis') reports = ALL_USERS.filter(u=>u.role==='kabid'||u.id==='sekretaris');
+  else reports = ALL_USERS.filter(u=>u.superior===CU.id);
 
-  let h=`<div class="page-title">Validasi Atasan</div><div class="page-sub">Validasi catatan bawahan langsung — ${formatDate(today)}</div>`;
+  const vDate = window._valDate || today;
 
-  if(!reports.length){h+=`<div class="card"><p class="text-muted">Tidak ada bawahan langsung.</p></div>`;el.innerHTML=h;return;}
+  let h = `<div class="page-title">Validasi Atasan</div>
+  <div class="page-sub">Validasi catatan bawahan — dapat memilih tanggal yang sudah terlewat</div>`;
+
+  if(!reports.length){
+    h+=`<div class="card"><p class="text-muted">Tidak ada bawahan langsung.</p></div>`;
+    el.innerHTML=h; return;
+  }
+
+  // ── Panel Filter Tanggal ──
+  h+=`<div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">📅 Filter Tanggal Validasi</span><span class="badge badge-gold" style="font-size:12px">${formatDate(vDate)}</span></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" id="vqf-hari" onclick="_setValDate('${today}')"
+          style="${vDate===today?'background:rgba(29,175,168,0.2);color:var(--teal2);border:1px solid rgba(29,175,168,0.4)':'background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)'}">
+          📅 Hari Ini
+        </button>`;
+  // Buat tombol 7 hari ke belakang
+  for(let d=1;d<=7;d++){
+    const pd=new Date(); pd.setDate(pd.getDate()-d);
+    const pdStr=pd.toISOString().split('T')[0];
+    const days=['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+    const dayLbl=days[pd.getDay()]+', '+pd.getDate()+'/'+(pd.getMonth()+1);
+    h+=`<button class="btn btn-sm" onclick="_setValDate('${pdStr}')"
+        style="${vDate===pdStr?'background:rgba(200,168,75,0.2);color:var(--gold);border:1px solid rgba(200,168,75,0.4)':'background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border)'}">
+        ${dayLbl}
+      </button>`;
+  }
+  h+=`</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+        <label style="font-size:12px;color:var(--text3);white-space:nowrap">Pilih tanggal:</label>
+        <input type="date" class="fi" id="val-date-custom" value="${vDate}"
+          style="width:160px;font-size:13px;padding:7px 12px"
+          max="${today}" onchange="_setValDate(this.value)">
+      </div>
+    </div>
+  </div>`;
+
+  // ── Konten per bawahan ──
+  h += `<div id="validasi-list-wrap">`;
 
   for(const rep of reports){
-    const key=`daily_${rep.id}_${today}`;
-    const snap=await getDoc(doc(db,'daily',key));
-    const data=snap.exists()?snap.data():{};
-    h+=`<div class="card"><div class="card-header"><span class="card-title">👤 ${rep.name}</span><span class="card-badge">${rep.label}</span></div>`;
+    const key = `daily_${rep.id}_${vDate}`;
+    let data = {};
+    try {
+      const snap = await getDoc(doc(db,'daily',key));
+      if(snap.exists()) data = snap.data();
+    } catch(e) {}
 
+    const isToday = vDate === today;
+    const dateLabel = isToday ? 'Hari Ini' : formatDate(vDate);
+
+    h+=`<div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <span class="card-title">👤 ${rep.name}</span>
+        <span class="card-badge">${rep.label}</span>
+        <span class="badge ${isToday?'badge-teal':'badge-gold'}" style="margin-left:4px;font-size:10px">${dateLabel}</span>
+      </div>`;
+
+    // ── STAF ──
     if(rep.role==='staf'){
-      const tasks=data.tasks||[];
-      if(!tasks.length){h+=`<p class="text-muted text-sm">Belum ada catatan kegiatan hari ini.</p>`;h+=`</div>`;continue;}
-      tasks.forEach((t,i)=>{
-        h+=`<div class="work-box mb-12" style="margin-bottom:12px">
-          <div class="work-box-num">Kegiatan ${i+1}</div>
-          <div class="fw6">${t.desc||'—'}</div>
-          <div class="text-muted text-sm mt-8" style="margin-top:6px">Output: ${t.output||'—'}</div>
-          <div class="mt-8">${t.tuntas?`<span class="badge badge-green">✅ Tuntas</span>`:`<span class="badge badge-orange">⏳ Belum Tuntas</span>`}</div>
-        </div>`;
-      });
-      h+=`<div class="val-section">`;
+      const tasks = data.tasks||[];
+      if(!tasks.filter(t=>t.desc).length){
+        h+=`<div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:28px">📋</div><div class="text-sm text-muted">Tidak ada catatan kegiatan pada ${formatDate(vDate)}.</div></div>`;
+      } else {
+        tasks.forEach((t,i)=>{
+          if(!t.desc) return;
+          h+=`<div class="work-box" style="margin-bottom:10px">
+            <div class="work-box-num">Kegiatan ${i+1}${t.carriedFrom?` <span style="color:var(--gold);font-size:10px">↩ dari ${t.carriedFrom}</span>`:''}
+            </div>
+            <div class="fw6" style="margin-bottom:6px">${t.desc}</div>
+            ${t.volume||t.ket?`<div class="text-sm text-muted" style="margin-bottom:4px">Volume: ${t.volume||1} ${t.ket||''}</div>`:''}
+            <div>${t.tuntas===true?`<span class="badge badge-green">✅ Tuntas</span>`:`<span class="badge badge-orange">⏳ Belum Tuntas</span>`}</div>
+          </div>`;
+        });
+      }
+      h+=`<div class="val-section" style="margin-top:12px">
+        <div class="val-title">✅ Validasi & Penilaian</div>`;
       if(!data.validated){
-        h+=`<div class="fr"><label class="fl">Catatan / Instruksi</label><textarea class="ft" id="val-note-${rep.id}" placeholder="Tulis catatan..."></textarea></div>
+        h+=`<div class="fr"><label class="fl">Catatan / Instruksi Atasan</label>
+          <textarea class="ft" id="val-note-${rep.id}" placeholder="Tulis catatan atau instruksi..."></textarea></div>
           <div class="fr"><label class="fl">Nilai Bintang</label>
           <div class="stars" id="val-stars-${rep.id}">`;
         for(let s=1;s<=5;s++) h+=`<span class="star" onclick="_setValStar('${rep.id}',${s})">★</span>`;
-        h+=`</div></div><button class="btn btn-gold btn-sm" onclick="_validateStaf('${rep.id}')">✅ Validasi & Simpan</button>`;
+        h+=`</div></div>
+          <button class="btn btn-gold btn-sm" onclick="_validateStaf('${rep.id}','${vDate}')">✅ Validasi & Simpan</button>`;
       } else {
-        h+=`<span class="badge badge-green">✅ Sudah Divalidasi</span>
-          <div class="text-sm text-muted mt-8" style="margin-top:6px">Catatan: ${data.validNote||'—'}</div>
-          <div class="stars mt-8" style="margin-top:6px">`;
+        h+=`<div class="flex-c gap-8 mb-8" style="margin-bottom:8px">
+          <span class="badge badge-green">✅ Sudah Divalidasi</span>
+        </div>
+        <div class="text-sm text-muted" style="margin-bottom:6px">📝 Catatan: ${data.validNote||'—'}</div>
+        <div class="stars">`;
         for(let s=1;s<=5;s++) h+=`<span class="star ${(data.stars||0)>=s?'on':''}" style="cursor:default">★</span>`;
         h+=`</div>`;
       }
       h+=`</div>`;
     }
 
+    // ── KABID / SEKRETARIS ──
     else if(rep.role==='kabid'||rep.role==='sekretaris'){
-      const works=data.works||[];
-      if(!works.filter(w=>w.desc).length){h+=`<p class="text-muted text-sm">Belum ada pekerjaan hari ini.</p>`;h+=`</div>`;continue;}
-      works.forEach((w,i)=>{
-        if(!w.desc) return;
-        const pct=parseInt(w.progress||0);
-        h+=`<div class="work-box mb-12" style="margin-bottom:12px">
-          <div class="work-box-num">Pekerjaan ${i+1}</div>
-          <div class="fw6">${w.desc}</div>
-          <div class="text-sm text-muted">Output: ${w.output||'—'} | Target: ${w.target||'—'}</div>
-          <div class="prog-row mt-8" style="margin-top:8px">
-            <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)}"></div></div>
-            <span class="prog-pct">${pct}%</span>
-          </div>`;
-        if(!w.validatedKadis){
-          h+=`<div class="val-section">
-            <textarea class="ft" id="kv-note-${rep.id}-${i}" placeholder="Catatan Kepala Dinas..." style="min-height:48px">${w.noteKadis||''}</textarea>
-            <button class="btn btn-gold btn-sm mt-8" style="margin-top:8px" onclick="_validateKabidWork('${rep.id}',${i})">✅ Validasi</button>
-          </div>`;
-        } else {
-          h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span><div class="text-sm text-muted mt-8" style="margin-top:6px">${w.noteKadis||''}</div></div>`;
-        }
-        h+=`</div>`;
-      });
+      const works = data.works||[];
+      const hasWork = works.some(w=>w.desc);
+      if(!hasWork){
+        h+=`<div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:28px">📋</div><div class="text-sm text-muted">Tidak ada pekerjaan pada ${formatDate(vDate)}.</div></div>`;
+      } else {
+        works.forEach((w,i)=>{
+          if(!w.desc) return;
+          const pct=parseInt(w.progress||0);
+          h+=`<div class="work-box" style="margin-bottom:10px">
+            <div class="work-box-num">Pekerjaan Strategis ${i+1}</div>
+            <div class="fw6" style="margin-bottom:4px">${w.desc}</div>
+            <div class="text-sm text-muted" style="margin-bottom:8px">Output: ${w.output||'—'} | Target: ${w.target||'—'}</div>
+            <div class="prog-row">
+              <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${progColor(pct)}"></div></div>
+              <span class="prog-pct">${pct}%</span>
+            </div>`;
+          const valKey = CU.role==='kadis'?'validatedKadis':'validated';
+          const noteKey = CU.role==='kadis'?'noteKadis':'noteAtasan';
+          if(!w[valKey]){
+            h+=`<div class="val-section">
+              <textarea class="ft" id="kv-note-${rep.id}-${i}" placeholder="Catatan atasan..." style="min-height:44px">${w[noteKey]||''}</textarea>
+              <button class="btn btn-gold btn-sm mt-8" style="margin-top:8px"
+                onclick="_validateKabidWork('${rep.id}',${i},'${vDate}')">✅ Validasi</button>
+            </div>`;
+          } else {
+            h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span>
+              <div class="text-sm text-muted mt-8" style="margin-top:6px">${w[noteKey]||''}</div></div>`;
+          }
+          h+=`</div>`;
+        });
+      }
     }
 
+    // ── KASUBAG ──
     else if(rep.role==='kasubag'){
-      const works=data.works||[];
-      const urgent=data.urgent||[];
-      const allItems=[...works.map((w,i)=>({...w,type:'reg',idx:i})),...urgent.map((u,i)=>({...u,type:'urg',idx:i}))];
-      if(!allItems.filter(x=>x.desc).length){h+=`<p class="text-muted text-sm">Belum ada pekerjaan hari ini.</p>`;h+=`</div>`;continue;}
-      allItems.forEach(item=>{
-        if(!item.desc) return;
-        const pct=parseInt(item.progress||0);
-        h+=`<div class="work-box mb-12" style="margin-bottom:12px;${item.type==='urg'?'border-color:rgba(229,62,62,0.35)':''}">
-          <div class="work-box-num" ${item.type==='urg'?'style="color:var(--red)"':''}>${item.type==='urg'?'🚨 Mendesak':'📌 Reguler'} ${item.idx+1}</div>
-          <div class="fw6">${item.desc}</div>
-          <div class="text-sm text-muted">Output: ${item.output||'—'} | Target: ${item.target||'—'}</div>
-          <div class="prog-row mt-8" style="margin-top:8px">
-            <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${item.type==='urg'?'var(--red)':progColor(pct)}"></div></div>
-            <span class="prog-pct">${pct}%</span>
-          </div>`;
-        if(!item.validated){
-          h+=`<div class="val-section">
-            <textarea class="ft" id="sv-note-${rep.id}-${item.type}-${item.idx}" placeholder="Catatan atasan..." style="min-height:44px"></textarea>
-            <button class="btn btn-teal btn-sm mt-8" style="margin-top:8px" onclick="_validateKasubag('${rep.id}','${item.type}',${item.idx})">✅ Validasi</button>
-          </div>`;
-        } else {
-          h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span><div class="text-sm text-muted mt-8" style="margin-top:6px">${item.noteAtasan||''}</div></div>`;
-        }
-        h+=`</div>`;
-      });
+      const works = data.works||[];
+      const urgent = data.urgent||[];
+      const allItems = [
+        ...works.map((w,i)=>({...w,type:'reg',idx:i})),
+        ...urgent.map((u,i)=>({...u,type:'urg',idx:i}))
+      ];
+      const hasItem = allItems.some(x=>x.desc);
+      if(!hasItem){
+        h+=`<div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:28px">📋</div><div class="text-sm text-muted">Tidak ada pekerjaan pada ${formatDate(vDate)}.</div></div>`;
+      } else {
+        allItems.forEach(item=>{
+          if(!item.desc) return;
+          const pct=parseInt(item.progress||0);
+          const isUrg=item.type==='urg';
+          h+=`<div class="work-box" style="margin-bottom:10px;${isUrg?'border-color:rgba(229,62,62,0.35)':''}">
+            <div class="work-box-num" ${isUrg?'style="color:var(--red)"':''}>${isUrg?'🚨 Mendesak':'📌 Reguler'} ${item.idx+1}</div>
+            <div class="fw6" style="margin-bottom:4px">${item.desc}</div>
+            <div class="text-sm text-muted" style="margin-bottom:8px">Output: ${item.output||'—'} | Target: ${item.target||'—'}</div>
+            <div class="prog-row">
+              <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${isUrg?'var(--red)':progColor(pct)}"></div></div>
+              <span class="prog-pct">${pct}%</span>
+            </div>`;
+          if(!item.validated){
+            h+=`<div class="val-section">
+              <textarea class="ft" id="sv-note-${rep.id}-${item.type}-${item.idx}"
+                placeholder="Catatan atasan..." style="min-height:44px"></textarea>
+              <button class="btn btn-teal btn-sm mt-8" style="margin-top:8px"
+                onclick="_validateKasubag('${rep.id}','${item.type}',${item.idx},'${vDate}')">✅ Validasi</button>
+            </div>`;
+          } else {
+            h+=`<div class="val-section"><span class="badge badge-green">✅ Tervalidasi</span>
+              <div class="text-sm text-muted mt-8" style="margin-top:6px">${item.noteAtasan||''}</div></div>`;
+          }
+          h+=`</div>`;
+        });
+      }
     }
     h+=`</div>`;
   }
-  el.innerHTML=h;
+
+  h+=`</div>`; // tutup validasi-list-wrap
+  el.innerHTML = h;
 }
 
-window._setValStar=function(repId,n){
-  valStarsMap[repId]=n;
+// ── Ganti tanggal validasi & refresh ──
+window._setValDate = async function(dateStr) {
+  if(!dateStr) return;
+  window._valDate = dateStr;
+  // Re-render validasi dengan tanggal baru
+  await renderValidasi();
+  // Scroll ke atas
+  document.getElementById('page-validasi')?.scrollTo({top:0,behavior:'smooth'});
+};
+
+window._setValStar = function(repId, n) {
+  valStarsMap[repId] = n;
   document.querySelectorAll(`#val-stars-${repId} .star`).forEach((s,i)=>s.classList.toggle('on',i<n));
 };
-window._validateStaf=async function(repId){
-  const note=document.getElementById(`val-note-${repId}`)?.value||'';
-  const stars=valStarsMap[repId]||0;
-  const key=`daily_${repId}_${today}`;
-  const snap=await getDoc(doc(db,'daily',key));
-  const data=snap.exists()?snap.data():{};
-  data.validated=true; data.validNote=note; data.stars=stars;
-  await setDoc(doc(db,'daily',key),data,{merge:false});
+
+window._validateStaf = async function(repId, vDate) {
+  vDate = vDate || window._valDate || today;
+  const note  = document.getElementById(`val-note-${repId}`)?.value||'';
+  const stars = valStarsMap[repId]||0;
+  const key   = `daily_${repId}_${vDate}`;
+  const snap  = await getDoc(doc(db,'daily',key));
+  const data  = snap.exists()?snap.data():{};
+  data.validated = true; data.validNote = note; data.stars = stars;
+  await setDoc(doc(db,'daily',key), data, {merge:false});
   if(stars===5){
-    const u=ALL_USERS.find(x=>x.id===repId);
-    await addLog({type:'star5',user:repId,userName:u?.name||repId,userLabel:u?.label||'',date:today});
+    const u = ALL_USERS.find(x=>x.id===repId);
+    await addLog({type:'star5',user:repId,userName:u?.name||repId,userLabel:u?.label||'',date:vDate});
   }
-  const u=ALL_USERS.find(x=>x.id===repId);
-  toast(`✅ Validasi untuk ${u?.name||repId} berhasil!`);
+  const u = ALL_USERS.find(x=>x.id===repId);
+  toast(`✅ Validasi untuk ${u?.name||repId} (${formatDate(vDate)}) berhasil!`);
   renderValidasi();
 };
-window._validateKabidWork=async function(repId,idx){
-  const note=document.getElementById(`kv-note-${repId}-${idx}`)?.value||'';
-  const key=`daily_${repId}_${today}`;
-  const snap=await getDoc(doc(db,'daily',key));
-  const data=snap.exists()?snap.data():{};
-  if(data.works&&data.works[idx]){data.works[idx].validatedKadis=true;data.works[idx].noteKadis=note;}
-  await setDoc(doc(db,'daily',key),data,{merge:false});
-  toast('✅ Pekerjaan tervalidasi!'); renderValidasi();
+
+window._validateKabidWork = async function(repId, idx, vDate) {
+  vDate = vDate || window._valDate || today;
+  const noteEl = CU.role==='kadis'
+    ? document.getElementById(`kv-note-${repId}-${idx}`)
+    : document.getElementById(`kv-note-${repId}-${idx}`);
+  const note = noteEl?.value||'';
+  const key  = `daily_${repId}_${vDate}`;
+  const snap = await getDoc(doc(db,'daily',key));
+  const data = snap.exists()?snap.data():{};
+  if(data.works&&data.works[idx]){
+    if(CU.role==='kadis'){
+      data.works[idx].validatedKadis = true;
+      data.works[idx].noteKadis = note;
+    } else {
+      data.works[idx].validated = true;
+      data.works[idx].noteAtasan = note;
+    }
+  }
+  await setDoc(doc(db,'daily',key), data, {merge:false});
+  toast(`✅ Pekerjaan tervalidasi (${formatDate(vDate)})!`);
+  renderValidasi();
 };
-window._validateKasubag=async function(repId,type,idx){
-  const note=document.getElementById(`sv-note-${repId}-${type}-${idx}`)?.value||'';
-  const key=`daily_${repId}_${today}`;
-  const snap=await getDoc(doc(db,'daily',key));
-  const data=snap.exists()?snap.data():{};
-  const arr=type==='urg'?'urgent':'works';
-  if(data[arr]&&data[arr][idx]){data[arr][idx].validated=true;data[arr][idx].noteAtasan=note;}
-  await setDoc(doc(db,'daily',key),data,{merge:false});
-  toast('✅ Pekerjaan tervalidasi!'); renderValidasi();
+
+window._validateKasubag = async function(repId, type, idx, vDate) {
+  vDate = vDate || window._valDate || today;
+  const note = document.getElementById(`sv-note-${repId}-${type}-${idx}`)?.value||'';
+  const key  = `daily_${repId}_${vDate}`;
+  const snap = await getDoc(doc(db,'daily',key));
+  const data = snap.exists()?snap.data():{};
+  const arr  = type==='urg'?'urgent':'works';
+  if(data[arr]&&data[arr][idx]){
+    data[arr][idx].validated  = true;
+    data[arr][idx].noteAtasan = note;
+  }
+  await setDoc(doc(db,'daily',key), data, {merge:false});
+  toast(`✅ Pekerjaan tervalidasi (${formatDate(vDate)})!`);
+  renderValidasi();
 };
 
 // ══════════════════════════════════════
