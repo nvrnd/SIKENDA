@@ -534,37 +534,68 @@ async function initApp() {
   showPage('executive');
 }
 
-// ── CARRY FORWARD: bawa kegiatan belum tuntas dari hari kemarin ke hari ini ──
+// ── CARRY FORWARD: bawa kegiatan belum tuntas ke hari ini ──
+// Cek 7 hari ke belakang untuk menangkap rantai carry (weekend, libur, dll)
 async function _carryForwardStafTasks() {
-  const yest = getYesterdayStr();
-  const yestKey = `daily_${CU.id}_${yest}`;
   const todayKey = `daily_${CU.id}_${today}`;
   try {
-    const [ySnap, tSnap] = await Promise.all([
-      getDoc(doc(db,'daily',yestKey)),
-      getDoc(doc(db,'daily',todayKey))
-    ]);
-    if(!ySnap.exists()) return;
-    const yData = ySnap.data();
+    const tSnap = await getDoc(doc(db,'daily',todayKey));
     const tData = tSnap.exists() ? tSnap.data() : {};
-    const yTasks = yData.tasks || [];
-    // Ambil kegiatan kemarin yang belum tuntas (tuntas !== true)
-    const unfinished = yTasks.filter(t => t.desc && t.tuntas !== true).map(t => ({
-      desc: t.desc,
-      output: t.output || '',
-      volume: t.volume || 1,
-      ket: t.ket || '',
-      tuntas: undefined,       // reset status
-      carriedFrom: yest,       // tandai asal tanggal
-    }));
-    if(!unfinished.length) return;
-    // Gabung dengan kegiatan hari ini yang sudah ada (hindari duplikat berdasarkan desc+carriedFrom)
     const todayTasks = tData.tasks || [];
-    const existingCarried = new Set(todayTasks.filter(t=>t.carriedFrom).map(t=>`${t.desc}|${t.carriedFrom}`));
-    const toAdd = unfinished.filter(u => !existingCarried.has(`${u.desc}|${u.carriedFrom}`));
+
+    // Kumpulkan semua desc kegiatan hari ini (sudah ada / sudah di-carry sebelumnya)
+    const existingDescs = new Set(todayTasks.map(t => (t.desc||'').trim()).filter(Boolean));
+
+    // Cari kegiatan belum tuntas dari 7 hari ke belakang
+    const toAdd = [];
+    const seenDescs = new Set(existingDescs); // untuk hindari duplikat antar hari
+
+    for(let d = 1; d <= 7; d++) {
+      const prevDate = new Date();
+      prevDate.setDate(prevDate.getDate() - d);
+      const prevStr = prevDate.toISOString().split('T')[0];
+      // Skip hari ini
+      if(prevStr === today) continue;
+
+      const prevKey = `daily_${CU.id}_${prevStr}`;
+      let prevSnap;
+      try { prevSnap = await getDoc(doc(db,'daily',prevKey)); }
+      catch(e) { continue; }
+      if(!prevSnap.exists()) continue;
+
+      const prevData = prevSnap.data();
+      const prevTasks = prevData.tasks || [];
+
+      // Kegiatan yang belum tuntas: tuntas === false ATAU tuntas tidak ada/null
+      const unfinished = prevTasks.filter(t => {
+        if(!t.desc || !t.desc.trim()) return false;  // skip kosong
+        if(t.tuntas === true) return false;           // skip yang sudah tuntas
+        if(seenDescs.has(t.desc.trim())) return false; // skip duplikat
+        return true;
+      });
+
+      unfinished.forEach(t => {
+        seenDescs.add(t.desc.trim());
+        toAdd.push({
+          desc:        t.desc,
+          volume:      t.volume || 1,
+          ket:         t.ket   || '',
+          carriedFrom: t.carriedFrom || prevStr, // simpan tanggal asal asli
+          // tuntas tidak diset — akan muncul sebagai "belum diklik"
+        });
+      });
+    }
+
     if(!toAdd.length) return;
-    const merged = [...toAdd, ...todayTasks]; // carry-forward di atas agar tampil lebih dulu
-    await setDoc(doc(db,'daily',todayKey), {...tData, tasks:merged, updatedAt:new Date().toISOString()}, {merge:false});
+
+    // Gabungkan: carry-forward di atas, kegiatan hari ini di bawah
+    const merged = [...toAdd, ...todayTasks];
+    await setDoc(
+      doc(db,'daily',todayKey),
+      {...tData, tasks: merged, updatedAt: new Date().toISOString()},
+      {merge: false}
+    );
+    console.log(`Carry forward: ${toAdd.length} kegiatan dibawa ke hari ini`);
   } catch(e) {
     console.warn('Carry forward error:', e.message);
   }
@@ -591,9 +622,12 @@ async function renderExecutive() {
   const el = document.getElementById('page-executive');
   el.innerHTML = `<div class="page-title">Executive View</div><div class="page-sub">${formatDate(today)}</div><div style="text-align:center;padding:40px"><span class="loading-spinner"></span> Memuat data...</div>`;
 
-  // Fetch realisasi all units
-  const realSnap = await getDocs(collection(db,'realisasi'));
-  const realAll = realSnap.docs.map(d=>({id:d.id,...d.data()}));
+  // Fetch realisasi all units (dengan error handling per query)
+  let realAll = [];
+  try {
+    const realSnap = await getDocs(collection(db,'realisasi'));
+    realAll = realSnap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e) { console.warn('Realisasi fetch:', e.message); }
 
   let totAnggaran=0,totKreal=0,totFItems=0,totFCnt=0;
   const unitReal={};
@@ -614,13 +648,26 @@ async function renderExecutive() {
   const kPct=totAnggaran?Math.round(totKreal/totAnggaran*100):0;
 
   // Fetch indikators
-  const indSnap = await getDocs(collection(db,'indikators'));
-  const indAll = indSnap.docs.map(d=>({id:d.id,...d.data()}));
+  let indAll = [];
+  try {
+    const indSnap = await getDocs(collection(db,'indikators'));
+    indAll = indSnap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e) { console.warn('Indikator fetch:', e.message); }
 
-  // Fetch star5 yesterday
+  // Fetch SEMUA star5 dari Firestore (filter di client — hindari composite index)
+  let allStar5=[];
+  try {
+    const star5Snap=await getDocs(query(collection(db,'logs'),where('type','==','star5')));
+    allStar5=star5Snap.docs.map(d=>d.data()).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  } catch(e) {
+    // Fallback: ambil semua log lalu filter
+    try {
+      const allLogSnap=await getDocs(collection(db,'logs'));
+      allStar5=allLogSnap.docs.map(d=>d.data()).filter(l=>l.type==='star5').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    } catch(e2) { console.warn('Star5 fetch error',e2); }
+  }
   const yest=getYesterdayStr();
-  const logSnap=await getDocs(query(collection(db,'logs'),where('type','==','star5'),where('date','==',yest)));
-  const star5=logSnap.docs.map(d=>d.data());
+  const star5=allStar5.filter(l=>l.date===yest); // default tampil kemarin
 
   // Build HTML
   let h=`<div class="page-title">Executive View</div>
@@ -688,25 +735,169 @@ async function renderExecutive() {
   });
   h+=`</div>`;
 
-  // Star5
-  h+=`<div class="card"><div class="card-header"><span class="card-title">⭐ Penghargaan Bintang 5 — Kemarin</span><span class="card-badge">TERKINI</span></div>`;
-  if(!star5.length) {
-    h+=`<div class="empty-state"><div class="empty-icon">🌟</div><div>Tidak ada penerima bintang 5 kemarin.</div></div>`;
-  } else {
-    star5.forEach(l=>{
-      h+=`<div class="star-card">
-        <div class="star-avatar">${initials(l.userName)}</div>
-        <div>
-          <div class="star-name">${l.userName}</div>
-          <div class="star-unit">${l.userLabel||''}</div>
-          <div class="text-sm text-muted mt-8" style="margin-top:6px">🎉 Mendapat nilai ⭐⭐⭐⭐⭐ dari atasan langsung</div>
+  // Simpan allStar5 ke window untuk filter
+  window._star5Data = allStar5;
+
+  // Star5 section dengan filter tanggal
+  const allDates = [...new Set(allStar5.map(l=>l.date).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+
+  h+=`<div class="card">
+    <div class="card-header">
+      <span class="card-title">⭐ Penghargaan Bintang 5</span>
+      <span class="card-badge" id="star5-badge">${star5.length} penerima</span>
+    </div>
+
+    <!-- Filter panel -->
+    <div style="background:rgba(200,168,75,0.06);border:1px solid rgba(200,168,75,0.15);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--text3);font-weight:600;white-space:nowrap">📅 Filter Tanggal:</div>
+
+        <!-- Filter cepat -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm" id="s5qf-kemarin"
+            style="background:rgba(200,168,75,0.2);color:var(--gold);border:1px solid rgba(200,168,75,0.4);font-size:12px"
+            onclick="_filterStar5('kemarin')">Kemarin</button>
+          <button class="btn btn-sm" id="s5qf-minggu"
+            style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border);font-size:12px"
+            onclick="_filterStar5('minggu')">Minggu Ini</button>
+          <button class="btn btn-sm" id="s5qf-bulan"
+            style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border);font-size:12px"
+            onclick="_filterStar5('bulan')">Bulan Ini</button>
+          <button class="btn btn-sm" id="s5qf-semua"
+            style="background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border);font-size:12px"
+            onclick="_filterStar5('semua')">Semua</button>
         </div>
-        <div style="margin-left:auto;font-size:32px">🌟</div>
-      </div>`;
+
+        <!-- Filter manual -->
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <label style="font-size:11px;color:var(--text3);white-space:nowrap">Pilih Tanggal:</label>
+          <input type="date" id="s5-date-from" class="fi" style="width:150px;font-size:12px;padding:6px 10px"
+            value="${yest}" onchange="_filterStar5Manual()">
+          <span style="font-size:11px;color:var(--text3)">s/d</span>
+          <input type="date" id="s5-date-to" class="fi" style="width:150px;font-size:12px;padding:6px 10px"
+            value="${yest}" onchange="_filterStar5Manual()">
+        </div>
+      </div>
+
+      <div style="margin-top:8px;font-size:11px;color:var(--teal2)" id="s5-filter-info">
+        Menampilkan: Kemarin (${formatDate(yest)})
+      </div>
+    </div>
+
+    <!-- Star cards list -->
+    <div id="star5-list">`;
+
+  function buildStar5Html(list, label) {
+    if(!list.length) return `<div class="empty-state"><div class="empty-icon">🌟</div><div>Tidak ada penerima bintang 5 ${label||'pada periode ini'}.</div></div>`;
+    // Group by date
+    const grouped = {};
+    list.forEach(l => {
+      if(!grouped[l.date]) grouped[l.date]=[];
+      grouped[l.date].push(l);
     });
+    let out = '';
+    Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(date => {
+      out += `<div style="font-size:11px;color:var(--gold);font-weight:600;letter-spacing:1px;padding:6px 0 8px;border-bottom:1px solid rgba(200,168,75,0.15);margin-bottom:10px">
+        📅 ${formatDate(date)} <span style="color:var(--text3);font-weight:400;margin-left:6px">${grouped[date].length} penerima</span>
+      </div>`;
+      grouped[date].forEach(l => {
+        out += `<div class="star-card">
+          <div class="star-avatar">${initials(l.userName||'?')}</div>
+          <div style="flex:1">
+            <div class="star-name">${l.userName||'—'}</div>
+            <div class="star-unit">${l.userLabel||''}</div>
+            <div class="text-sm text-muted" style="margin-top:4px">🎉 Mendapat nilai ⭐⭐⭐⭐⭐ dari atasan langsung</div>
+          </div>
+          <div style="font-size:28px;flex-shrink:0">🌟</div>
+        </div>`;
+      });
+      out += '<div style="height:6px"></div>';
+    });
+    return out;
   }
-  h+=`</div>`;
+
+  h += buildStar5Html(star5, 'kemarin');
+  h += `</div></div>`;
+
   el.innerHTML=h;
+
+  // Expose buildStar5Html untuk filter
+  window._buildStar5Html = buildStar5Html;
+}
+
+// ── Filter Star5 quick ──
+window._filterStar5 = function(key) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  let from='', to='', label='';
+
+  if(key==='kemarin'){
+    const y=new Date(now); y.setDate(y.getDate()-1);
+    from=to=fmt(y); label='Kemarin ('+formatDate(from)+')';
+  } else if(key==='minggu'){
+    const dow=now.getDay();
+    const mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    from=fmt(mon); to=fmt(sun); label='Minggu Ini';
+  } else if(key==='bulan'){
+    from=`${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+    const last=new Date(now.getFullYear(),now.getMonth()+1,0);
+    to=fmt(last); label='Bulan Ini';
+  } else {
+    from=''; to=''; label='Semua Riwayat';
+  }
+
+  // Sync input tanggal
+  const fEl=document.getElementById('s5-date-from');
+  const tEl=document.getElementById('s5-date-to');
+  if(fEl) fEl.value=from;
+  if(tEl) tEl.value=to;
+
+  // Highlight tombol aktif
+  ['kemarin','minggu','bulan','semua'].forEach(k=>{
+    const b=document.getElementById(`s5qf-${k}`);
+    if(!b) return;
+    const active=k===key;
+    b.style.background=active?'rgba(200,168,75,0.2)':'rgba(255,255,255,0.06)';
+    b.style.color=active?'var(--gold)':'var(--text2)';
+    b.style.borderColor=active?'rgba(200,168,75,0.4)':'rgba(255,255,255,0.1)';
+  });
+
+  _applyStar5Filter(from, to, label);
+};
+
+// ── Filter Star5 manual date ──
+window._filterStar5Manual = function() {
+  const from=document.getElementById('s5-date-from')?.value||'';
+  const to=document.getElementById('s5-date-to')?.value||'';
+  if(from&&to&&from>to){
+    document.getElementById('s5-date-from').style.borderColor='var(--red)';
+    return;
+  }
+  document.getElementById('s5-date-from').style.borderColor='';
+  // Reset quick filter highlight
+  ['kemarin','minggu','bulan','semua'].forEach(k=>{
+    const b=document.getElementById(`s5qf-${k}`);
+    if(b){b.style.background='rgba(255,255,255,0.06)';b.style.color='var(--text2)';b.style.borderColor='rgba(255,255,255,0.1)';}
+  });
+  const label = from&&to ? `${formatDate(from)} s/d ${formatDate(to)}` : from ? `Dari ${formatDate(from)}` : 'Semua';
+  _applyStar5Filter(from, to, label);
+};
+
+// ── Apply star5 filter ──
+function _applyStar5Filter(from, to, label) {
+  const all = window._star5Data || [];
+  let filtered = [...all];
+  if(from) filtered=filtered.filter(l=>(l.date||'')>=from);
+  if(to)   filtered=filtered.filter(l=>(l.date||'')<=to);
+
+  const list=document.getElementById('star5-list');
+  const badge=document.getElementById('star5-badge');
+  const info=document.getElementById('s5-filter-info');
+  if(list && window._buildStar5Html) list.innerHTML=window._buildStar5Html(filtered, '');
+  if(badge) badge.textContent=`${filtered.length} penerima`;
+  if(info)  info.textContent=`Menampilkan: ${label||'Semua'} — ${filtered.length} penerima`;
 }
 
 // ══════════════════════════════════════
@@ -891,7 +1082,7 @@ function renderStafFormHtml(data) {
                   ? 'background:var(--orange);color:#fff;border:2px solid var(--orange);box-shadow:0 0 12px rgba(221,107,32,0.5);font-weight:700'
                   : 'background:rgba(221,107,32,0.1);color:#f6ad55;border:2px solid rgba(221,107,32,0.3)'
                 }">
-                ${t.tuntas===false ? '⏳ BELUM ✓' : '○ Belum'}
+                ${t.tuntas===false ? '⏳ BELUM TUNTAS ✓' : '○ Belum Tuntas'}
               </button>
             </div>`
         }
@@ -1048,12 +1239,15 @@ window._setTask = async function(i, tuntas) {
   const data=snap.exists()?snap.data():{};
   if(!data.tasks) data.tasks=[];
   while(data.tasks.length<=i) data.tasks.push({});
-  data.tasks[i].tuntas = tuntas;
+  // Simpan sebagai boolean (true/false), bukan undefined
+  data.tasks[i].tuntas = tuntas === true ? true : false;
   data.tasks[i].desc   = document.getElementById(`st-desc-${i}`)?.value || data.tasks[i].desc  || '';
-  data.tasks[i].volume = parseInt(document.getElementById(`st-vol-${i}`)?.value || data.tasks[i].volume || 1);
+  data.tasks[i].volume = parseInt(document.getElementById(`st-vol-${i}`)?.value  || '') || data.tasks[i].volume || 1;
   data.tasks[i].ket    = document.getElementById(`st-ket-${i}`)?.value  || data.tasks[i].ket   || '';
   // Jika tuntas, hapus flag carriedFrom agar tidak carry lagi besok
-  if(tuntas) delete data.tasks[i].carriedFrom;
+  if(tuntas === true) {
+    delete data.tasks[i].carriedFrom;
+  }
   await setDoc(doc(db,'daily',key),data,{merge:false});
   renderDaily();
 };
@@ -1068,19 +1262,25 @@ window._addTask = async function() {
     t.volume = parseInt(document.getElementById(`st-vol-${i}`)?.value  || t.volume || 1);
     t.ket    = document.getElementById(`st-ket-${i}`)?.value  || t.ket   || '';
   });
-  tasks.push({ volume: 1 });
+  tasks.push({ volume: 1, tuntas: null }); // null = belum diklik
   data.tasks=tasks;
   await setDoc(doc(db,'daily',key),data,{merge:false});
   renderDaily();
 };
 async function saveStafTasks(existing) {
   const key=`daily_${CU.id}_${today}`;
-  const tasks=(existing.tasks||[]).map((t,i)=>({
-    ...t,
-    desc:   document.getElementById(`st-desc-${i}`)?.value || t.desc   || '',
-    volume: parseInt(document.getElementById(`st-vol-${i}`)?.value  || t.volume || 1),
-    ket:    document.getElementById(`st-ket-${i}`)?.value  || t.ket   || '',
-  }));
+  const tasks=(existing.tasks||[]).map((t,i)=>{
+    const desc   = document.getElementById(`st-desc-${i}`)?.value || t.desc   || '';
+    const volRaw = document.getElementById(`st-vol-${i}`)?.value;
+    const volume = parseInt(volRaw||'') || t.volume || 1;
+    const ket    = document.getElementById(`st-ket-${i}`)?.value  || t.ket   || '';
+    // Pastikan tuntas tersimpan sebagai boolean atau null, tidak undefined
+    const tuntas = t.tuntas === true ? true : (t.tuntas === false ? false : null);
+    const out = { ...t, desc, volume, ket, tuntas };
+    // Bersihkan field undefined
+    Object.keys(out).forEach(k => { if(out[k] === undefined) delete out[k]; });
+    return out;
+  });
   for(const t of tasks) {
     if(t.tuntas && t.desc) {
       await addLog({
@@ -1526,8 +1726,8 @@ async function renderIndikator() {
 
   const unit=CU.unit;
   const unitName=UNITS[unit]||unit;
-  const canEdit=CU.role==='kasubag'||CU.role==='admin';
-  const canManage=CU.role==='admin'; // tambah/hapus
+  const canEdit  = CU.role==='kasubag' || CU.role==='admin';
+  const canManage = CU.role==='kasubag' || CU.role==='admin'; // tambah/edit/hapus
 
   const snap=await getDocs(query(collection(db,'indikators'),where('unit','==',unit)));
   const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.active!==false);
@@ -1564,7 +1764,7 @@ async function renderIndikator() {
         <div class="flex gap-8">
           ${cls==='danger'?`<span class="badge badge-red">⚠️ Jauh di Bawah</span>`:cls==='warn'?`<span class="badge badge-orange">⚡ Di Bawah Target</span>`:gap!==null?`<span class="badge badge-green">✅ On Track</span>`:''}
           ${canEdit?`<button class="btn btn-blue btn-xs" onclick="_editIndikator('${item.id}')">✏️ Edit</button>`:''}
-          ${canManage?`<button class="btn btn-red btn-xs" onclick="_delIndikator('${item.id}')">🗑</button>`:''}
+          ${canManage?`<button class="btn btn-red btn-xs" onclick="_konfirmasiDelIndikator('${item.id}','${item.nama.replace(/'/g,"\'")}')">🗑️ Hapus</button>`:''}
         </div>
       </div>
       <div class="g3" style="gap:10px;margin-bottom:10px">
@@ -1650,10 +1850,46 @@ window._saveEditIndikator=async function(id){
   });
   _closeModal(); toast('✅ Indikator berhasil diperbarui!'); renderIndikator();
 };
-window._delIndikator=async function(id){
-  if(!confirm('Hapus indikator ini? Data akan dihapus permanen.')) return;
-  await deleteDoc(doc(db,'indikators',id));
-  toast('🗑 Indikator dihapus'); renderIndikator();
+window._konfirmasiDelIndikator = function(id, nama) {
+  showModal(`
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:44px;margin-bottom:12px">🗑️</div>
+      <div class="modal-title" style="margin-bottom:8px;color:#fc8181">Hapus Indikator Kinerja</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">
+        Anda akan menghapus indikator:<br>
+        <strong style="color:var(--gold2)">"${nama}"</strong>
+      </div>
+    </div>
+    <div style="background:rgba(229,62,62,0.08);border:1px solid rgba(229,62,62,0.25);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">
+      ⚠️ Tindakan ini <strong>tidak dapat dibatalkan</strong>. Seluruh data target dan realisasi indikator ini akan dihapus permanen dari sistem.
+    </div>
+    <div class="fr">
+      <label class="fl">Ketik <strong style="color:#fc8181">HAPUS</strong> untuk konfirmasi</label>
+      <input class="fi" id="del-ind-confirm" placeholder="Ketik HAPUS di sini..." style="border-color:rgba(229,62,62,0.4)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-teal btn-sm" onclick="_closeModal()">Batal</button>
+      <button class="btn btn-red btn-sm" onclick="_delIndikator('${id}')">🗑️ Hapus Permanen</button>
+    </div>
+  `);
+};
+window._delIndikator = async function(id) {
+  const konfirmEl = document.getElementById('del-ind-confirm');
+  if(konfirmEl && konfirmEl.value.trim().toUpperCase() !== 'HAPUS') {
+    konfirmEl.style.borderColor = 'var(--red)';
+    konfirmEl.style.boxShadow = '0 0 0 2px rgba(229,62,62,0.3)';
+    konfirmEl.placeholder = '⚠️ Ketik HAPUS untuk melanjutkan!';
+    konfirmEl.focus();
+    return;
+  }
+  try {
+    await deleteDoc(doc(db,'indikators',id));
+    _closeModal();
+    toast('🗑️ Indikator berhasil dihapus permanen');
+    renderIndikator();
+  } catch(e) {
+    toast('❌ Gagal menghapus: ' + e.message);
+  }
 };
 
 // ══════════════════════════════════════
@@ -1663,9 +1899,15 @@ async function renderLog() {
   const el = document.getElementById('page-log');
   el.innerHTML = `<div class="page-title">Log Kegiatan</div><div style="text-align:center;padding:32px"><span class="loading-spinner"></span></div>`;
 
-  // Ambil semua log dari Firestore
-  const snap = await getDocs(query(collection(db,'logs'), orderBy('savedAt','desc')));
-  let allLogs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  // Ambil semua log (sort di client untuk hindari index requirement)
+  let allLogs = [];
+  try {
+    const snap = await getDocs(collection(db,'logs'));
+    allLogs = snap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>(b.savedAt||'').localeCompare(a.savedAt||''));
+  } catch(e) {
+    console.warn('Log fetch error:', e.message);
+  }
 
   // Filter sesuai role — non-admin/kadis hanya lihat milik sendiri + bawahan
   if(CU.role !== 'admin' && CU.role !== 'kadis') {
