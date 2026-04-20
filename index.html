@@ -609,41 +609,58 @@ async function _carryForwardKabidWorks() {
   try {
     const tSnap = await getDoc(doc(db,'daily',todayKey));
     const tData = tSnap.exists() ? tSnap.data() : {};
-    // Hanya carry jika hari ini belum ada data sama sekali
-    if(tData.works && tData.works.some(w=>w.desc)) return;
+    const todayWorks = tData.works || [];
 
-    // Cari pekerjaan belum 100% dari 7 hari ke belakang
+    // Kumpulkan desc pekerjaan yang sudah ada hari ini (termasuk carry sebelumnya)
+    const existingDescs = new Set(
+      todayWorks.filter(w=>w.desc).map(w=>w.desc.trim())
+    );
+
+    // Kumpulkan pekerjaan belum 100% dari 7 hari ke belakang
+    const toCarry = [];
+    const seenDescs = new Set(existingDescs);
+
     for(let d=1; d<=7; d++){
       const prev = new Date(); prev.setDate(prev.getDate()-d);
       const prevStr = prev.toISOString().split('T')[0];
-      if(prevStr===today) continue;
+      if(prevStr === today) continue;
       const prevKey = `daily_${CU.id}_${prevStr}`;
       let prevSnap;
       try { prevSnap = await getDoc(doc(db,'daily',prevKey)); } catch(e){ continue; }
       if(!prevSnap.exists()) continue;
-      const prevData = prevSnap.data();
-      const prevWorks = prevData.works||[];
-      // Ambil pekerjaan yang belum 100% dan belum divalidasi Kadis
-      const unfinished = prevWorks.filter(w=>w.desc && parseInt(w.progress||0)<100 && !w.validatedKadis)
-        .map(w=>({
+      const prevWorks = prevSnap.data().works || [];
+
+      prevWorks.forEach(w => {
+        if(!w.desc || !w.desc.trim()) return;
+        if(parseInt(w.progress||0) >= 100) return;    // sudah selesai, skip
+        if(w.validatedKadis) return;                   // sudah divalidasi, skip
+        if(seenDescs.has(w.desc.trim())) return;       // sudah ada, skip duplikat
+        seenDescs.add(w.desc.trim());
+        toCarry.push({
           ...w,
-          progress: w.progress||0,
           validatedKadis: false,
           noteKadis: '',
-          carriedFrom: prevStr,
-        }));
-      if(!unfinished.length) continue;
-      // Isi slot kosong dengan pekerjaan yang belum selesai
-      const newWorks = [...unfinished];
-      while(newWorks.length<3) newWorks.push({});
-      await setDoc(doc(db,'daily',todayKey),
-        {...tData, works:newWorks.slice(0,3), updatedAt:new Date().toISOString()},
-        {merge:false}
-      );
-      console.log(`Kabid carry: ${unfinished.length} pekerjaan dari ${prevStr}`);
-      return; // cukup ambil dari 1 hari saja (hari terakhir ada data)
+          carriedFrom: w.carriedFrom || prevStr,  // jaga tanggal asal asli
+        });
+      });
     }
-  } catch(e){ console.warn('Carry kabid error:', e.message); }
+
+    if(!toCarry.length) return;
+
+    // Gabungkan: carry di depan, pekerjaan hari ini yang sudah ada di belakang
+    const todayExisting = todayWorks.filter(w=>w.desc);
+    const merged = [...toCarry, ...todayExisting];
+    // Pastikan ada 3 slot, sisanya kosong
+    while(merged.length < 3) merged.push({});
+
+    await setDoc(doc(db,'daily',todayKey),
+      { ...tData, works: merged.slice(0,3), updatedAt: new Date().toISOString() },
+      { merge: false }
+    );
+    console.log(`Kabid carry: ${toCarry.length} pekerjaan belum selesai dibawa ke hari ini`);
+  } catch(e) {
+    console.warn('Carry kabid error:', e.message);
+  }
 }
 
 // ── CARRY FORWARD KASUBAG (pekerjaan reguler & mendesak belum 100%) ──
@@ -652,94 +669,72 @@ async function _carryForwardKasubagWorks() {
   try {
     const tSnap = await getDoc(doc(db,'daily',todayKey));
     const tData = tSnap.exists() ? tSnap.data() : {};
-    // Hanya carry jika hari ini kosong
-    const hasToday = (tData.works||[]).some(w=>w.desc)||(tData.urgent||[]).some(u=>u.desc);
-    if(hasToday) return;
+    const todayWorks  = tData.works  || [];
+    const todayUrgent = tData.urgent || [];
+
+    // Desc yang sudah ada hari ini
+    const existingWorksDescs  = new Set(todayWorks.filter(w=>w.desc).map(w=>w.desc.trim()));
+    const existingUrgentDescs = new Set(todayUrgent.filter(u=>u.desc).map(u=>u.desc.trim()));
+
+    const toCarryWorks  = [];
+    const toCarryUrgent = [];
+    const seenW = new Set(existingWorksDescs);
+    const seenU = new Set(existingUrgentDescs);
 
     for(let d=1; d<=7; d++){
       const prev = new Date(); prev.setDate(prev.getDate()-d);
       const prevStr = prev.toISOString().split('T')[0];
-      if(prevStr===today) continue;
+      if(prevStr === today) continue;
       const prevKey = `daily_${CU.id}_${prevStr}`;
       let prevSnap;
       try { prevSnap = await getDoc(doc(db,'daily',prevKey)); } catch(e){ continue; }
       if(!prevSnap.exists()) continue;
       const prevData = prevSnap.data();
 
-      const unfinishedWorks = (prevData.works||[])
-        .filter(w=>w.desc && parseInt(w.progress||0)<100 && !w.validated)
-        .map(w=>({...w, validated:false, noteAtasan:'', carriedFrom:prevStr}));
+      // Pekerjaan reguler belum selesai
+      (prevData.works||[]).forEach(w=>{
+        if(!w.desc||!w.desc.trim()) return;
+        if(parseInt(w.progress||0)>=100) return;
+        if(w.validated) return;
+        if(seenW.has(w.desc.trim())) return;
+        seenW.add(w.desc.trim());
+        toCarryWorks.push({ ...w, validated:false, noteAtasan:'', carriedFrom:w.carriedFrom||prevStr });
+      });
 
-      const unfinishedUrgent = (prevData.urgent||[])
-        .filter(u=>u.desc && parseInt(u.progress||0)<100 && !u.validated)
-        .map(u=>({...u, validated:false, noteAtasan:'', carriedFrom:prevStr}));
-
-      if(!unfinishedWorks.length && !unfinishedUrgent.length) continue;
-
-      const newWorks = [...unfinishedWorks]; while(newWorks.length<3) newWorks.push({});
-      const newUrgent = [...unfinishedUrgent]; while(newUrgent.length<3) newUrgent.push({});
-
-      await setDoc(doc(db,'daily',todayKey),
-        {...tData, works:newWorks.slice(0,3), urgent:newUrgent.slice(0,3), updatedAt:new Date().toISOString()},
-        {merge:false}
-      );
-      console.log(`Kasubag carry: ${unfinishedWorks.length} reguler, ${unfinishedUrgent.length} urgent dari ${prevStr}`);
-      return;
+      // Pekerjaan mendesak belum selesai
+      (prevData.urgent||[]).forEach(u=>{
+        if(!u.desc||!u.desc.trim()) return;
+        if(parseInt(u.progress||0)>=100) return;
+        if(u.validated) return;
+        if(seenU.has(u.desc.trim())) return;
+        seenU.add(u.desc.trim());
+        toCarryUrgent.push({ ...u, validated:false, noteAtasan:'', carriedFrom:u.carriedFrom||prevStr });
+      });
     }
-  } catch(e){ console.warn('Carry kasubag error:', e.message); }
+
+    if(!toCarryWorks.length && !toCarryUrgent.length) return;
+
+    // Gabungkan carry + yang sudah ada hari ini
+    const mergedWorks  = [...toCarryWorks,  ...todayWorks.filter(w=>w.desc)];
+    const mergedUrgent = [...toCarryUrgent, ...todayUrgent.filter(u=>u.desc)];
+    while(mergedWorks.length  < 3) mergedWorks.push({});
+    while(mergedUrgent.length < 3) mergedUrgent.push({});
+
+    await setDoc(doc(db,'daily',todayKey),
+      {
+        ...tData,
+        works:  mergedWorks.slice(0,3),
+        urgent: mergedUrgent.slice(0,3),
+        updatedAt: new Date().toISOString()
+      },
+      { merge: false }
+    );
+    console.log(`Kasubag carry: ${toCarryWorks.length} reguler, ${toCarryUrgent.length} urgent`);
+  } catch(e) {
+    console.warn('Carry kasubag error:', e.message);
+  }
 }
 
-// ── CARRY FORWARD KABID (pekerjaan strategis belum 100%) ──
-async function _carryForwardKabidWorks() {
-  const todayKey = `daily_${CU.id}_${today}`;
-  try {
-    const tSnap = await getDoc(doc(db,'daily',todayKey));
-    const tData = tSnap.exists() ? tSnap.data() : {};
-    if(tData.works && tData.works.some(w=>w.desc)) return;
-    for(let d=1; d<=7; d++){
-      const prev=new Date(); prev.setDate(prev.getDate()-d);
-      const prevStr=prev.toISOString().split('T')[0];
-      if(prevStr===today) continue;
-      let prevSnap; try{prevSnap=await getDoc(doc(db,'daily',`daily_${CU.id}_${prevStr}`));}catch(e){continue;}
-      if(!prevSnap||!prevSnap.exists()) continue;
-      const prevData=prevSnap.data();
-      const unfinished=(prevData.works||[]).filter(w=>w.desc&&parseInt(w.progress||0)<100&&!w.validatedKadis)
-        .map(w=>({...w,validated:false,validatedKadis:false,noteKadis:'',carriedFrom:prevStr}));
-      if(!unfinished.length) continue;
-      const newWorks=[...unfinished]; while(newWorks.length<3) newWorks.push({});
-      await setDoc(doc(db,'daily',todayKey),{...tData,works:newWorks.slice(0,3),updatedAt:new Date().toISOString()},{merge:false});
-      return;
-    }
-  } catch(e){ console.warn('Carry kabid:',e.message); }
-}
-
-// ── CARRY FORWARD KASUBAG (pekerjaan reguler & mendesak belum 100%) ──
-async function _carryForwardKasubagWorks() {
-  const todayKey = `daily_${CU.id}_${today}`;
-  try {
-    const tSnap = await getDoc(doc(db,'daily',todayKey));
-    const tData = tSnap.exists() ? tSnap.data() : {};
-    const hasToday=(tData.works||[]).some(w=>w.desc)||(tData.urgent||[]).some(u=>u.desc);
-    if(hasToday) return;
-    for(let d=1; d<=7; d++){
-      const prev=new Date(); prev.setDate(prev.getDate()-d);
-      const prevStr=prev.toISOString().split('T')[0];
-      if(prevStr===today) continue;
-      let prevSnap; try{prevSnap=await getDoc(doc(db,'daily',`daily_${CU.id}_${prevStr}`));}catch(e){continue;}
-      if(!prevSnap||!prevSnap.exists()) continue;
-      const prevData=prevSnap.data();
-      const uW=(prevData.works||[]).filter(w=>w.desc&&parseInt(w.progress||0)<100&&!w.validated)
-        .map(w=>({...w,validated:false,noteAtasan:'',carriedFrom:prevStr}));
-      const uU=(prevData.urgent||[]).filter(u=>u.desc&&parseInt(u.progress||0)<100&&!u.validated)
-        .map(u=>({...u,validated:false,noteAtasan:'',carriedFrom:prevStr}));
-      if(!uW.length&&!uU.length) continue;
-      const nW=[...uW]; while(nW.length<3) nW.push({});
-      const nU=[...uU]; while(nU.length<3) nU.push({});
-      await setDoc(doc(db,'daily',todayKey),{...tData,works:nW.slice(0,3),urgent:nU.slice(0,3),updatedAt:new Date().toISOString()},{merge:false});
-      return;
-    }
-  } catch(e){ console.warn('Carry kasubag:',e.message); }
-}
 
 // ── NAVIGATION ──
 window.showPage = function(id) {
@@ -1095,9 +1090,13 @@ function renderKabidFormHtml(data) {
     const w=works[i]||{};
     const lk=locked||w.validatedKadis;
     const pct=parseInt(w.progress||0);
-    h+=`<div class="work-box ${lk?'locked':''}">
+    h+=`<div class="work-box ${lk?'locked':''}" style="${w.carriedFrom?'border-color:rgba(200,168,75,0.45)':''}">
+      ${w.carriedFrom?`<div style="font-size:11px;color:var(--gold);margin-bottom:8px;padding:4px 8px;background:rgba(200,168,75,0.08);border-radius:4px">↩ Dilanjutkan dari: ${formatDate(w.carriedFrom)}</div>`:''}
       <div class="flex-b mb-8" style="margin-bottom:8px">
-        <div class="work-box-num" style="margin-bottom:0">📌 Pekerjaan ${i+1}</div>
+        <div class="work-box-num" style="margin-bottom:0;display:flex;align-items:center;gap:6px">
+          <span>📌 Pekerjaan ${i+1}</span>
+          ${w.carriedFrom?`<span class="badge badge-gold" style="font-size:10px;padding:2px 7px">↩ Lanjutan</span>`:''}
+        </div>
         ${!lk&&w.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKabidWork(${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
       </div>
       <div class="fr"><label class="fl">Pekerjaan Strategis</label><textarea class="ft" id="wk-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan strategis...">${w.desc||''}</textarea></div>
@@ -1128,9 +1127,13 @@ function renderKasubagFormHtml(data) {
     const w=works[i]||{};
     const lk=locked||w.validated;
     const pct=parseInt(w.progress||0);
-    h+=`<div class="work-box ${lk?'locked':''}">
+    h+=`<div class="work-box ${lk?'locked':''}" style="${w.carriedFrom?'border-color:rgba(200,168,75,0.45)':''}">
+      ${w.carriedFrom?`<div style="font-size:11px;color:var(--gold);margin-bottom:8px;padding:4px 8px;background:rgba(200,168,75,0.08);border-radius:4px">↩ Dilanjutkan dari: ${formatDate(w.carriedFrom)}</div>`:''}
       <div class="flex-b mb-8" style="margin-bottom:8px">
-        <div class="work-box-num" style="margin-bottom:0">📌 Reguler ${i+1}</div>
+        <div class="work-box-num" style="margin-bottom:0;display:flex;align-items:center;gap:6px">
+          <span>📌 Reguler ${i+1}</span>
+          ${w.carriedFrom?`<span class="badge badge-gold" style="font-size:10px;padding:2px 7px">↩ Lanjutan</span>`:''}
+        </div>
         ${!lk&&w.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKasubagWork('reg',${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
       </div>
       <div class="fr"><label class="fl">Pekerjaan</label><textarea class="ft" id="ws-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan...">${w.desc||''}</textarea></div>
@@ -1154,9 +1157,13 @@ function renderKasubagFormHtml(data) {
     const u=urgent[i]||{};
     const lk=locked||u.validated;
     const pct=parseInt(u.progress||0);
-    h+=`<div class="work-box ${lk?'locked':''}" style="border-color:rgba(229,62,62,0.3)">
+    h+=`<div class="work-box ${lk?'locked':''}" style="border-color:${u.carriedFrom?'rgba(200,168,75,0.45)':'rgba(229,62,62,0.3)'}">
+      ${u.carriedFrom?`<div style="font-size:11px;color:var(--gold);margin-bottom:8px;padding:4px 8px;background:rgba(200,168,75,0.08);border-radius:4px">↩ Dilanjutkan dari: ${formatDate(u.carriedFrom)}</div>`:''}
       <div class="flex-b mb-8" style="margin-bottom:8px">
-        <div class="work-box-num" style="margin-bottom:0;color:var(--red)">🚨 Mendesak ${i+1}</div>
+        <div class="work-box-num" style="margin-bottom:0;color:var(--red);display:flex;align-items:center;gap:6px">
+          <span>🚨 Mendesak ${i+1}</span>
+          ${u.carriedFrom?`<span class="badge badge-gold" style="font-size:10px;padding:2px 7px">↩ Lanjutan</span>`:''}
+        </div>
         ${!lk&&u.desc?`<button class="btn btn-red btn-xs" onclick="_hapusKasubagWork('urg',${i})" title="Hapus kegiatan ini">🗑 Hapus</button>`:''}
       </div>
       <div class="fr"><label class="fl">Pekerjaan Mendesak</label><textarea class="ft" id="wu-desc-${i}" ${lk?'disabled':''} placeholder="Uraikan pekerjaan mendesak...">${u.desc||''}</textarea></div>
